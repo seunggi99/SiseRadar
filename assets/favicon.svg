@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-label="SiseRadar">
+  <title>SiseRadar</title>
+  <rect x="0" y="0" width="64" height="64" rx="14" fill="#0E1B2E"/>
+  <circle cx="32" cy="33" r="20" fill="none" stroke="#39E0CE" stroke-opacity="0.35"/>
+  <circle cx="32" cy="33" r="11" fill="none" stroke="#39E0CE" stroke-opacity="0.28"/>
+  <path d="M32,33 L32,13 A20,20 0 0,1 50.8,21.2 Z" fill="#14C2B2" fill-opacity="0.22"/>
+  <line x1="32" y1="33" x2="32" y2="13" stroke="#39E0CE" stroke-width="1.5"/>
+  <polygon points="40,26 45,21 50,26" fill="#39E0CE"/>
+  <rect x="40.6" y="26" width="8.8" height="7" fill="#39E0CE"/>
+</svg>

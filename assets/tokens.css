@@ -1,0 +1,57 @@
+/* SiseRadar design tokens.
+   Import once globally (e.g. in src/index.css). Toggle dark mode by adding
+   data-theme="dark" (or the .dark class) to <html>. */
+
+:root {
+  /* brand */
+  --sr-navy: #0E1B2E;
+  --sr-navy-soft: #13243B;
+  --sr-teal: #14C2B2;        /* signal teal — brand accent, radar sweep */
+  --sr-teal-deep: #0B8276;   /* teal text/icons on light bg */
+  --sr-teal-bright: #39E0CE; /* teal accent on dark bg */
+  --sr-teal-tint: #BDEDE7;
+
+  /* neutrals */
+  --sr-slate: #5B6B7F;
+  --sr-mist: #EAF0F4;
+  --sr-cloud: #F6F9FB;
+  --sr-white: #FFFFFF;
+
+  /* price direction — KOREAN convention: up = red, down = blue */
+  --sr-up: #E5484D;
+  --sr-down: #2F6FED;
+
+  /* semantic surfaces/text — light mode */
+  --sr-bg: var(--sr-cloud);
+  --sr-surface: var(--sr-white);
+  --sr-surface-2: var(--sr-mist);
+  --sr-text: var(--sr-navy);
+  --sr-text-muted: var(--sr-slate);
+  --sr-accent: var(--sr-teal-deep);
+  --sr-border: rgba(14, 27, 46, 0.10);
+
+  /* type */
+  --sr-font-sans: 'Pretendard', 'Apple SD Gothic Neo', -apple-system,
+    BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --sr-font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular',
+    'Roboto Mono', monospace;
+
+  /* radius */
+  --sr-radius-sm: 8px;
+  --sr-radius: 12px;
+  --sr-radius-lg: 16px;
+}
+
+:root[data-theme='dark'],
+.dark {
+  --sr-bg: var(--sr-navy);
+  --sr-surface: var(--sr-navy-soft);
+  --sr-surface-2: #1B2E47;
+  --sr-text: var(--sr-mist);
+  --sr-text-muted: #9FB1C6;
+  --sr-accent: var(--sr-teal-bright);
+  --sr-border: rgba(255, 255, 255, 0.10);
+}
+
+/* always render numeric/ticker values with tabular figures */
+.sr-num { font-family: var(--sr-font-mono); font-variant-numeric: tabular-nums; }

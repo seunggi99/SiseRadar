@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-label="SiseRadar">
+  <title>SiseRadar</title>
+  <desc>A radar with concentric rings, a rotating sweep, and a house-shaped blip.</desc>
+  <style>
+    @keyframes sr-sweep { to { transform: rotate(360deg); } }
+    .sr-sweep { transform-origin: 32px 32px; animation: sr-sweep 4s linear infinite; }
+    @media (prefers-reduced-motion: reduce) { .sr-sweep { animation: none; } }
+  </style>
+  <circle cx="32" cy="32" r="27" fill="none" stroke="#14C2B2" stroke-opacity="0.30"/>
+  <circle cx="32" cy="32" r="18" fill="none" stroke="#14C2B2" stroke-opacity="0.25"/>
+  <circle cx="32" cy="32" r="9"  fill="none" stroke="#14C2B2" stroke-opacity="0.22"/>
+  <line x1="5" y1="32" x2="59" y2="32" stroke="#14C2B2" stroke-opacity="0.15"/>
+  <line x1="32" y1="5" x2="32" y2="59" stroke="#14C2B2" stroke-opacity="0.15"/>
+  <g class="sr-sweep">
+    <path d="M32,32 L32,5 A27,27 0 0,1 57.4,22.8 Z" fill="#14C2B2" fill-opacity="0.18"/>
+    <line x1="32" y1="32" x2="32" y2="5" stroke="#14C2B2" stroke-width="1.5"/>
+  </g>
+  <circle cx="47" cy="22" r="9" fill="none" stroke="#14C2B2" stroke-opacity="0.5"/>
+  <polygon points="42,21 47,16 52,21" fill="#14C2B2"/>
+  <rect x="42.6" y="21" width="8.8" height="7" fill="#14C2B2"/>
+</svg>

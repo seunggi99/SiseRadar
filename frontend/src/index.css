@@ -1,0 +1,69 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── SiseRadar design tokens (from assets/tokens.css) ──────────────────────
+   Toggle dark mode by setting data-theme="dark" (or .dark) on <html>. */
+:root {
+  /* brand */
+  --sr-navy: #0e1b2e;
+  --sr-navy-soft: #13243b;
+  --sr-teal: #14c2b2; /* signal teal — brand accent, radar sweep */
+  --sr-teal-deep: #0b8276; /* teal text/icons on light bg */
+  --sr-teal-bright: #39e0ce; /* teal accent on dark bg */
+  --sr-teal-tint: #bdede7;
+
+  /* neutrals */
+  --sr-slate: #5b6b7f;
+  --sr-mist: #eaf0f4;
+  --sr-cloud: #f6f9fb;
+  --sr-white: #ffffff;
+
+  /* price direction — KOREAN convention: up = red, down = blue */
+  --sr-up: #e5484d;
+  --sr-down: #2f6fed;
+
+  /* semantic surfaces/text — light mode */
+  --sr-bg: var(--sr-cloud);
+  --sr-surface: var(--sr-white);
+  --sr-surface-2: var(--sr-mist);
+  --sr-text: var(--sr-navy);
+  --sr-text-muted: var(--sr-slate);
+  --sr-accent: var(--sr-teal-deep);
+  --sr-border: rgba(14, 27, 46, 0.1);
+
+  /* type */
+  --sr-font-sans: 'Pretendard', 'Apple SD Gothic Neo', -apple-system,
+    BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --sr-font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular',
+    'Roboto Mono', monospace;
+
+  /* radius */
+  --sr-radius-sm: 8px;
+  --sr-radius: 12px;
+  --sr-radius-lg: 16px;
+}
+
+:root[data-theme='dark'],
+.dark {
+  --sr-bg: var(--sr-navy);
+  --sr-surface: var(--sr-navy-soft);
+  --sr-surface-2: #1b2e47;
+  --sr-text: var(--sr-mist);
+  --sr-text-muted: #9fb1c6;
+  --sr-accent: var(--sr-teal-bright);
+  --sr-border: rgba(255, 255, 255, 0.1);
+}
+
+/* always render numeric/ticker values with tabular figures */
+.sr-num {
+  font-family: var(--sr-font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+body {
+  margin: 0;
+  font-family: var(--sr-font-sans);
+  background: var(--sr-bg);
+  color: var(--sr-text);
+}
