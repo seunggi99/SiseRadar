@@ -26,6 +26,27 @@ export function useComplexTrades(lawdCd: string, aptName: string | null) {
   });
 }
 
+// ── region on-demand collection ──
+export function useRegionStatus(lawdCd: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ['regionStatus', lawdCd],
+    queryFn: () => api.regions.status(lawdCd),
+    enabled,
+    // poll while a backfill is running
+    refetchInterval: (query) =>
+      query.state.data?.state === 'COLLECTING' ? 4000 : false,
+  });
+}
+
+export function useCollectRegion() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (lawdCd: string) => api.regions.collect(lawdCd),
+    onSuccess: (_data, lawdCd) =>
+      qc.invalidateQueries({ queryKey: ['regionStatus', lawdCd] }),
+  });
+}
+
 // ── watchlist ──
 export function useWatchlist(enabled: boolean) {
   return useQuery({

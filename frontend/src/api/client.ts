@@ -6,6 +6,7 @@ import type {
   MonthlyStats,
   NotificationItem,
   PageResponse,
+  RegionStatus,
   Trade,
   WatchlistItem,
   WatchType,
@@ -121,6 +122,14 @@ export const api = {
     add: (body: { watchlistId: number; condition: AlertCondition; threshold?: number }) =>
       request<AlertRule>('POST', '/api/alerts', { body }),
     remove: (id: number) => request<void>('DELETE', `/api/alerts/${id}`),
+  },
+
+  // ── region on-demand collection ──
+  regions: {
+    status: (lawdCd: string) =>
+      request<RegionStatus>('GET', `/api/regions/${lawdCd}/status`),
+    collect: (lawdCd: string) =>
+      request<RegionStatus>('POST', `/api/regions/${lawdCd}/collect`),
   },
 
   // ── notifications ──

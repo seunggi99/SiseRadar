@@ -71,3 +71,9 @@ export interface NotificationItem {
   read: boolean;
   createdAt: string;
 }
+
+export type RegionCollectState = 'NONE' | 'COLLECTING' | 'DONE';
+export interface RegionStatus {
+  state: RegionCollectState;
+  months: number;
+}

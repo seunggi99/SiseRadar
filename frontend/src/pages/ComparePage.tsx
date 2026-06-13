@@ -13,10 +13,11 @@ import {
 import { api } from '../api/client';
 import type { MonthlyStats } from '../api/types';
 import { Header } from '../components/Header';
+import { RegionSearch } from '../components/RegionSearch';
 import { COMPARE_COLORS, chartColors } from '../lib/colors';
 import { formatCount, formatEok, formatManwon, formatPercent, formatYmShort } from '../lib/format';
 import { directionColor } from '../lib/colors';
-import { REGIONS, regionName } from '../lib/regions';
+import { regionName } from '../lib/regions';
 import { useTheme } from '../lib/theme';
 
 const MAX = 3;
@@ -55,12 +56,13 @@ export function ComparePage() {
     return row;
   });
 
-  function toggle(lawdCd: string) {
-    setSelected((cur) => {
-      if (cur.includes(lawdCd)) return cur.filter((c) => c !== lawdCd);
-      if (cur.length >= MAX) return cur;
-      return [...cur, lawdCd];
-    });
+  function add(lawdCd: string) {
+    setSelected((cur) =>
+      cur.includes(lawdCd) || cur.length >= MAX ? cur : [...cur, lawdCd],
+    );
+  }
+  function remove(lawdCd: string) {
+    setSelected((cur) => cur.filter((c) => c !== lawdCd));
   }
 
   return (
@@ -70,32 +72,31 @@ export function ComparePage() {
         <h1 className="mb-1 text-xl font-medium tracking-tight">지역 비교</h1>
         <p className="sr-muted mb-5 text-sm">최대 {MAX}개 지역의 평균가 추이를 겹쳐 봅니다.</p>
 
-        {/* region toggles */}
-        <div className="mb-6 flex flex-wrap gap-2">
-          {REGIONS.map((r) => {
-            const active = selected.includes(r.lawdCd);
-            const idx = selected.indexOf(r.lawdCd);
-            return (
+        {/* selected region chips + search to add */}
+        <div className="mb-6 flex flex-wrap items-center gap-2">
+          {selected.map((lawdCd, idx) => (
+            <span
+              key={lawdCd}
+              className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm"
+              style={{
+                background: 'var(--sr-surface-2)',
+                border: `0.5px solid ${COMPARE_COLORS[idx % MAX]}`,
+              }}
+            >
+              <span className="h-2 w-2 rounded-full" style={{ background: COMPARE_COLORS[idx % MAX] }} />
+              {regionName(lawdCd)}
               <button
-                key={r.lawdCd}
-                onClick={() => toggle(r.lawdCd)}
-                className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm"
-                style={{
-                  background: active ? 'var(--sr-surface-2)' : 'transparent',
-                  border: `0.5px solid ${active ? COMPARE_COLORS[idx % MAX] : 'var(--sr-border)'}`,
-                  color: active ? 'var(--sr-text)' : 'var(--sr-text-muted)',
-                }}
+                aria-label="제거"
+                className="sr-muted hover:text-[var(--sr-up)]"
+                onClick={() => remove(lawdCd)}
               >
-                {active && (
-                  <span
-                    className="h-2 w-2 rounded-full"
-                    style={{ background: COMPARE_COLORS[idx % MAX] }}
-                  />
-                )}
-                {r.name}
+                ✕
               </button>
-            );
-          })}
+            </span>
+          ))}
+          {selected.length < MAX && (
+            <RegionSearch onSelect={(r) => add(r.lawdCd)} placeholder="지역 추가" />
+          )}
         </div>
 
         {selected.length === 0 ? (

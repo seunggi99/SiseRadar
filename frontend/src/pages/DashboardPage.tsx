@@ -1,12 +1,18 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ApiError } from '../api/client';
-import { useAddWatchlist, useComplexRanking, useMonthlyStats } from '../api/hooks';
+import {
+  useAddWatchlist,
+  useCollectRegion,
+  useComplexRanking,
+  useMonthlyStats,
+  useRegionStatus,
+} from '../api/hooks';
 import { ComplexDetailModal } from '../components/ComplexDetailModal';
 import { ComplexRankingTable } from '../components/ComplexRankingTable';
 import { Header } from '../components/Header';
 import { KpiCard } from '../components/KpiCard';
-import { RegionSelector } from '../components/RegionSelector';
+import { RegionSearch } from '../components/RegionSearch';
 import { EmptyState, ErrorState, LoadingState } from '../components/StateViews';
 import { TrendChart } from '../components/TrendChart';
 import { useAuth } from '../lib/auth';
@@ -28,12 +34,33 @@ export function DashboardPage() {
   const monthly = useMonthlyStats(lawdCd);
   const ranking = useComplexRanking(lawdCd);
 
+  // on-demand collection: regions with no data trigger a background 24-month backfill
+  const stats = monthly.data ?? [];
+  const noData = !monthly.isLoading && !monthly.isError && stats.length === 0;
+  const regionStatus = useRegionStatus(lawdCd, noData);
+  const collectRegion = useCollectRegion();
+  const triggered = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (noData && regionStatus.data?.state === 'NONE' && !triggered.current.has(lawdCd)) {
+      triggered.current.add(lawdCd);
+      collectRegion.mutate(lawdCd);
+    }
+  }, [noData, regionStatus.data?.state, lawdCd, collectRegion]);
+
+  useEffect(() => {
+    if (regionStatus.data?.state === 'DONE' && regionStatus.data.months > 0) {
+      monthly.refetch();
+      ranking.refetch();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [regionStatus.data?.state, regionStatus.data?.months]);
+
   const { isAuthenticated } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
   const addWatchlist = useAddWatchlist();
 
-  const stats = monthly.data ?? [];
   const latest = stats.length ? stats[stats.length - 1] : null;
 
   function requireLogin(): boolean {
@@ -84,7 +111,7 @@ export function DashboardPage() {
             <button className="sr-input text-sm" onClick={addRegion} title="이 지역을 관심목록에 추가">
               + 관심 지역
             </button>
-            <RegionSelector value={lawdCd} onChange={setLawdCd} />
+            <RegionSearch onSelect={(r) => setLawdCd(r.lawdCd)} />
           </div>
         </div>
 
@@ -92,11 +119,15 @@ export function DashboardPage() {
           <LoadingState />
         ) : monthly.isError ? (
           <ErrorState onRetry={() => monthly.refetch()} />
-        ) : !latest ? (
-          <EmptyState
-            message={`${regionName(lawdCd)}는 아직 수집된 거래가 없어요. 다른 지역을 선택하거나 수집을 실행해 주세요.`}
-          />
-        ) : (
+        ) : noData ? (
+          regionStatus.data?.state === 'DONE' && (regionStatus.data?.months ?? 0) === 0 ? (
+            <EmptyState message={`${regionName(lawdCd)}는 최근 24개월 거래가 없어요.`} />
+          ) : (
+            <LoadingState
+              message={`${regionName(lawdCd)} 데이터를 처음 불러오는 중이에요 — 수십 초 걸릴 수 있어요.`}
+            />
+          )
+        ) : latest ? (
           <div className="flex flex-col gap-6">
             {/* KPI cards */}
             <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -150,7 +181,7 @@ export function DashboardPage() {
               )}
             </section>
           </div>
-        )}
+        ) : null}
 
         <footer className="sr-muted mt-10 text-center text-xs">
           데이터 · 국토교통부 아파트 매매 실거래가 (data.go.kr)
