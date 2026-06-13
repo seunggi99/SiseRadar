@@ -1,5 +1,7 @@
 package com.siseradar.web;
 
+import com.siseradar.collect.KakaoClient;
+import com.siseradar.collect.KakaoClient.ResolvedRegion;
 import com.siseradar.collect.RegionCollectionService;
 import com.siseradar.collect.RegionCollectionService.Status;
 import io.swagger.v3.oas.annotations.Operation;
@@ -8,17 +10,26 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/regions")
-@Tag(name = "Regions", description = "지역 데이터 수집 상태")
+@Tag(name = "Regions", description = "지역 데이터 수집 상태 / 좌표 변환")
 public class RegionController {
 
   private final RegionCollectionService regionCollection;
+  private final KakaoClient kakaoClient;
 
-  public RegionController(RegionCollectionService regionCollection) {
+  public RegionController(RegionCollectionService regionCollection, KakaoClient kakaoClient) {
     this.regionCollection = regionCollection;
+    this.kakaoClient = kakaoClient;
+  }
+
+  @GetMapping("/resolve")
+  @Operation(summary = "좌표(x=lng, y=lat) → 법정동 5자리 시군구 코드 (카카오)")
+  public ResolvedRegion resolve(@RequestParam double x, @RequestParam double y) {
+    return kakaoClient.coord2region(x, y);
   }
 
   @GetMapping("/{lawdCd}/status")

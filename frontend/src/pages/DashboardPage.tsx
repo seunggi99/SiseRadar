@@ -12,6 +12,7 @@ import { ComplexDetailModal } from '../components/ComplexDetailModal';
 import { ComplexRankingTable } from '../components/ComplexRankingTable';
 import { Header } from '../components/Header';
 import { KpiCard } from '../components/KpiCard';
+import { RegionMapModal } from '../components/RegionMapModal';
 import { RegionSearch } from '../components/RegionSearch';
 import { EmptyState, ErrorState, LoadingState } from '../components/StateViews';
 import { TrendChart } from '../components/TrendChart';
@@ -31,6 +32,7 @@ import { DEFAULT_LAWD_CD, regionName } from '../lib/regions';
 export function DashboardPage() {
   const [lawdCd, setLawdCd] = useState(DEFAULT_LAWD_CD);
   const [selectedComplex, setSelectedComplex] = useState<string | null>(null);
+  const [mapOpen, setMapOpen] = useState(false);
   const monthly = useMonthlyStats(lawdCd);
   const ranking = useComplexRanking(lawdCd);
 
@@ -112,6 +114,9 @@ export function DashboardPage() {
               + 관심 지역
             </button>
             <RegionSearch onSelect={(r) => setLawdCd(r.lawdCd)} />
+            <button className="sr-input text-sm" onClick={() => setMapOpen(true)} title="지도에서 지역 선택">
+              지도
+            </button>
           </div>
         </div>
 
@@ -194,6 +199,13 @@ export function DashboardPage() {
           aptName={selectedComplex}
           onClose={() => setSelectedComplex(null)}
           onAdd={addComplex}
+        />
+      )}
+
+      {mapOpen && (
+        <RegionMapModal
+          onSelect={(cd) => setLawdCd(cd)}
+          onClose={() => setMapOpen(false)}
         />
       )}
     </div>

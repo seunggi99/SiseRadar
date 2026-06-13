@@ -77,3 +77,9 @@ export interface RegionStatus {
   state: RegionCollectState;
   months: number;
 }
+
+export interface ResolvedRegion {
+  lawdCd: string;
+  sido: string;
+  sigungu: string;
+}

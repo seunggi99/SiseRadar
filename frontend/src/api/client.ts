@@ -7,6 +7,7 @@ import type {
   NotificationItem,
   PageResponse,
   RegionStatus,
+  ResolvedRegion,
   Trade,
   WatchlistItem,
   WatchType,
@@ -130,6 +131,8 @@ export const api = {
       request<RegionStatus>('GET', `/api/regions/${lawdCd}/status`),
     collect: (lawdCd: string) =>
       request<RegionStatus>('POST', `/api/regions/${lawdCd}/collect`),
+    resolve: (lng: number, lat: number) =>
+      request<ResolvedRegion>('GET', '/api/regions/resolve', { params: { x: lng, y: lat } }),
   },
 
   // ── notifications ──
