@@ -39,3 +39,18 @@ dependencies {
 tasks.named('test') {
     useJUnitPlatform()
 }
+
+// Load the repo-root .env into bootRun's environment so `./gradlew bootRun` just works
+// with secrets kept out of git. (Secrets via env only — see CLAUDE.md.)
+tasks.named('bootRun') {
+    def envFile = rootProject.file('../.env')
+    if (envFile.exists()) {
+        envFile.readLines().each { line ->
+            def trimmed = line.trim()
+            if (trimmed && !trimmed.startsWith('#') && trimmed.contains('=')) {
+                def idx = trimmed.indexOf('=')
+                environment trimmed.substring(0, idx).trim(), trimmed.substring(idx + 1).trim()
+            }
+        }
+    }
+}
