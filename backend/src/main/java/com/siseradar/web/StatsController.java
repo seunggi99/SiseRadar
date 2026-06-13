@@ -1,5 +1,6 @@
 package com.siseradar.web;
 
+import com.siseradar.web.dto.ComplexRankResponse;
 import com.siseradar.web.dto.MonthlyStatsResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -27,5 +28,12 @@ public class StatsController {
       @RequestParam(required = false) String from,
       @RequestParam(required = false) String to) {
     return statsService.monthly(lawdCd, from, to);
+  }
+
+  @GetMapping("/complexes")
+  @Operation(summary = "지역/월별 단지 랭킹 (평균가 기준)")
+  public List<ComplexRankResponse> complexes(
+      @RequestParam String lawdCd, @RequestParam(required = false) String ym) {
+    return statsService.complexes(lawdCd, ym);
   }
 }

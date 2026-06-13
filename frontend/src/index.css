@@ -66,4 +66,61 @@ body {
   font-family: var(--sr-font-sans);
   background: var(--sr-bg);
   color: var(--sr-text);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── brand component classes (flat, thin borders, whitespace over shadow) ── */
+@layer components {
+  .sr-surface {
+    background: var(--sr-surface);
+    border: 0.5px solid var(--sr-border);
+    border-radius: var(--sr-radius);
+  }
+  .sr-card {
+    background: var(--sr-surface);
+    border: 0.5px solid var(--sr-border);
+    border-radius: var(--sr-radius);
+    padding: 1rem 1.25rem;
+  }
+  /* KPI card: small teal left-accent */
+  .sr-kpi {
+    border-left: 2px solid var(--sr-accent);
+  }
+  .sr-label {
+    font-size: 13px;
+    color: var(--sr-text-muted);
+  }
+  .sr-muted {
+    color: var(--sr-text-muted);
+  }
+  .sr-divide {
+    border-color: var(--sr-border);
+  }
+  .sr-input {
+    background: var(--sr-surface);
+    border: 0.5px solid var(--sr-border);
+    border-radius: var(--sr-radius-sm);
+    color: var(--sr-text);
+    padding: 0.45rem 0.7rem;
+  }
+  .sr-input:focus {
+    outline: 2px solid var(--sr-accent);
+    outline-offset: 1px;
+  }
+}
+
+/* ── radar sweep — the one signature motion; reused as the loading indicator ── */
+@keyframes sr-sweep {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.sr-radar__sweep {
+  transform-origin: center;
+  animation: sr-sweep 1.4s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .sr-radar__sweep {
+    animation: none;
+  }
 }

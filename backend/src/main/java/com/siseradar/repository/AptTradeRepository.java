@@ -56,4 +56,25 @@ public interface AptTradeRepository extends JpaRepository<AptTrade, Long> {
       nativeQuery = true)
   List<MonthlyStatRow> monthlyStats(
       @Param("lawdCd") String lawdCd, @Param("from") String from, @Param("to") String to);
+
+  /** Per-complex aggregates for one region+month, ranked by average price (만원). */
+  @Query(
+      value =
+          """
+          SELECT t.apt_name AS aptName,
+                 COUNT(*) AS cnt,
+                 AVG(t.deal_amount) AS avgAmount,
+                 MAX(t.deal_amount) AS maxAmount,
+                 AVG(t.deal_amount / (t.area / 3.305785)) AS avgPricePerPyeong
+          FROM apt_trade t
+          WHERE t.lawd_cd = :lawdCd AND t.deal_ymd = :ym
+          GROUP BY t.apt_name
+          ORDER BY avgAmount DESC
+          """,
+      nativeQuery = true)
+  List<ComplexRankRow> complexRanking(@Param("lawdCd") String lawdCd, @Param("ym") String ym);
+
+  /** Most recent deal_ymd present for a region (used to default the dashboard month). */
+  @Query("SELECT MAX(t.dealYmd) FROM AptTrade t WHERE t.lawdCd = :lawdCd")
+  String latestYmd(@Param("lawdCd") String lawdCd);
 }
