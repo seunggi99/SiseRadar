@@ -1,5 +1,6 @@
 package com.siseradar.collect;
 
+import com.siseradar.alert.AlertEvaluationService;
 import com.siseradar.collect.dto.AptTradeApiResponse;
 import com.siseradar.domain.AptTrade;
 import com.siseradar.repository.AptTradeRepository;
@@ -28,12 +29,17 @@ public class TradeCollectionService {
   private final DataGoKrClient client;
   private final AptTradeRepository repository;
   private final CollectionProperties props;
+  private final AlertEvaluationService alertEvaluation;
 
   public TradeCollectionService(
-      DataGoKrClient client, AptTradeRepository repository, CollectionProperties props) {
+      DataGoKrClient client,
+      AptTradeRepository repository,
+      CollectionProperties props,
+      AlertEvaluationService alertEvaluation) {
     this.client = client;
     this.repository = repository;
     this.props = props;
+    this.alertEvaluation = alertEvaluation;
   }
 
   /** Result of one region+month collection run. */
@@ -81,6 +87,14 @@ public class TradeCollectionService {
     }
 
     repository.saveAll(toInsert);
+
+    // Raise watchlist alerts for the newly inserted trades. Never let alerting fail collection.
+    try {
+      alertEvaluation.evaluate(lawdCd, dealYmd, toInsert);
+    } catch (RuntimeException e) {
+      log.warn("Alert evaluation failed for {} {}: {}", lawdCd, dealYmd, e.getMessage());
+    }
+
     Result result = new Result(lawdCd, dealYmd, fetched, toInsert.size(), fetched - toInsert.size());
     log.info(
         "Collected {} {}: fetched={} inserted={} skipped={}",

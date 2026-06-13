@@ -77,4 +77,15 @@ public interface AptTradeRepository extends JpaRepository<AptTrade, Long> {
   /** Most recent deal_ymd present for a region (used to default the dashboard month). */
   @Query("SELECT MAX(t.dealYmd) FROM AptTrade t WHERE t.lawdCd = :lawdCd")
   String latestYmd(@Param("lawdCd") String lawdCd);
+
+  /** Average price (만원) for a region+month, or null if no rows — for alert evaluation. */
+  @Query("SELECT AVG(t.dealAmount) FROM AptTrade t WHERE t.lawdCd = :lawdCd AND t.dealYmd = :ym")
+  Double avgAmountByRegionAndYm(@Param("lawdCd") String lawdCd, @Param("ym") String ym);
+
+  /** Average price (만원) for a single complex in a region+month, or null if none. */
+  @Query(
+      "SELECT AVG(t.dealAmount) FROM AptTrade t "
+          + "WHERE t.lawdCd = :lawdCd AND t.aptName = :aptName AND t.dealYmd = :ym")
+  Double avgAmountByComplexAndYm(
+      @Param("lawdCd") String lawdCd, @Param("aptName") String aptName, @Param("ym") String ym);
 }
