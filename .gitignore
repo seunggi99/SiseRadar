@@ -6,6 +6,7 @@
 # ── backend (Gradle / Spring Boot) ───────────────────────────────────────
 /backend/build/
 /backend/.gradle/
+/backend/data/
 
 # ── frontend (Vite / Node) ───────────────────────────────────────────────
 /frontend/node_modules/
