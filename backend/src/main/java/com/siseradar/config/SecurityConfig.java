@@ -37,7 +37,10 @@ public class SecurityConfig {
                     // public read + auth + docs
                     .requestMatchers("/api/auth/**", "/api/health", "/error")
                     .permitAll()
-                    .requestMatchers(HttpMethod.GET, "/api/trades/**", "/api/stats/**", "/api/regions/**")
+                    .requestMatchers(HttpMethod.GET, "/api/trades/**", "/api/stats/**")
+                    .permitAll()
+                    // region status + on-demand collect are public (dashboard has no login)
+                    .requestMatchers("/api/regions/**")
                     .permitAll()
                     .requestMatchers(
                         "/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**", "/h2-console/**")

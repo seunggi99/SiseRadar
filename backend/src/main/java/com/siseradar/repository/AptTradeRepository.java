@@ -80,6 +80,10 @@ public interface AptTradeRepository extends JpaRepository<AptTrade, Long> {
   @Query("SELECT MAX(t.dealYmd) FROM AptTrade t WHERE t.lawdCd = :lawdCd")
   String latestYmd(@Param("lawdCd") String lawdCd);
 
+  /** Distinct months collected for a region — drives on-demand collection state. */
+  @Query("SELECT COUNT(DISTINCT t.dealYmd) FROM AptTrade t WHERE t.lawdCd = :lawdCd")
+  long countMonths(@Param("lawdCd") String lawdCd);
+
   /** Average price (만원) for a region+month, or null if no rows — for alert evaluation. */
   @Query("SELECT AVG(t.dealAmount) FROM AptTrade t WHERE t.lawdCd = :lawdCd AND t.dealYmd = :ym")
   Double avgAmountByRegionAndYm(@Param("lawdCd") String lawdCd, @Param("ym") String ym);
