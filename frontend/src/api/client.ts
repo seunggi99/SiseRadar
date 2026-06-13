@@ -92,6 +92,7 @@ export const api = {
 
   trades: (params: {
     lawdCd: string;
+    aptName?: string;
     from?: string;
     to?: string;
     areaMin?: number;

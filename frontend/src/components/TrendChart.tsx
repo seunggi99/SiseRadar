@@ -76,7 +76,14 @@ export function TrendChart({ data }: TrendChartProps) {
           width={32}
         />
         <Tooltip content={renderTooltip} cursor={{ fill: c.grid }} />
-        <Bar yAxisId="volume" dataKey="count" fill={c.bar} radius={[3, 3, 0, 0]} barSize={22} />
+        <Bar
+          yAxisId="volume"
+          dataKey="count"
+          fill={c.bar}
+          radius={[3, 3, 0, 0]}
+          barSize={22}
+          isAnimationActive={false}
+        />
         <Line
           yAxisId="price"
           type="monotone"
@@ -85,6 +92,7 @@ export function TrendChart({ data }: TrendChartProps) {
           strokeWidth={2}
           dot={{ r: 3, fill: c.line }}
           activeDot={{ r: 5 }}
+          isAnimationActive={false}
         />
       </ComposedChart>
     </ResponsiveContainer>

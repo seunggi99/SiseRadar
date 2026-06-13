@@ -9,6 +9,12 @@ export const BRAND = {
   slate: '#5B6B7F',
 } as const;
 
+/**
+ * Categorical palette for the compare view (one color per region). Kept to 3, teal-led, and
+ * deliberately distinct from the up-red/down-blue direction colors so meaning stays unambiguous.
+ */
+export const COMPARE_COLORS = ['#14C2B2', '#8B7FD6', '#E0A93B'] as const;
+
 /** Direction color for a delta: up = red, down = blue, flat = muted. */
 export function directionColor(value: number | null | undefined): string {
   if (value === null || value === undefined || value === 0) return 'var(--sr-text-muted)';

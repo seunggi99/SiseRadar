@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ApiError } from '../api/client';
 import { useAddWatchlist, useComplexRanking, useMonthlyStats } from '../api/hooks';
+import { ComplexDetailModal } from '../components/ComplexDetailModal';
 import { ComplexRankingTable } from '../components/ComplexRankingTable';
 import { Header } from '../components/Header';
 import { KpiCard } from '../components/KpiCard';
@@ -23,6 +24,7 @@ import { DEFAULT_LAWD_CD, regionName } from '../lib/regions';
 
 export function DashboardPage() {
   const [lawdCd, setLawdCd] = useState(DEFAULT_LAWD_CD);
+  const [selectedComplex, setSelectedComplex] = useState<string | null>(null);
   const monthly = useMonthlyStats(lawdCd);
   const ranking = useComplexRanking(lawdCd);
 
@@ -140,7 +142,11 @@ export function DashboardPage() {
               ) : ranking.isError ? (
                 <ErrorState onRetry={() => ranking.refetch()} />
               ) : (
-                <ComplexRankingTable rows={ranking.data ?? []} onAddComplex={addComplex} />
+                <ComplexRankingTable
+                  rows={ranking.data ?? []}
+                  onAddComplex={addComplex}
+                  onSelectComplex={setSelectedComplex}
+                />
               )}
             </section>
           </div>
@@ -150,6 +156,15 @@ export function DashboardPage() {
           데이터 · 국토교통부 아파트 매매 실거래가 (data.go.kr)
         </footer>
       </main>
+
+      {selectedComplex && (
+        <ComplexDetailModal
+          lawdCd={lawdCd}
+          aptName={selectedComplex}
+          onClose={() => setSelectedComplex(null)}
+          onAdd={addComplex}
+        />
+      )}
     </div>
   );
 }

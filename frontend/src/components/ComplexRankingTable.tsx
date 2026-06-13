@@ -8,6 +8,8 @@ interface ComplexRankingTableProps {
   rows: ComplexRank[];
   /** When provided, each row shows a "관심 추가" button calling this with the complex name. */
   onAddComplex?: (aptName: string) => void;
+  /** When provided, the complex name becomes a button opening the detail view. */
+  onSelectComplex?: (aptName: string) => void;
 }
 
 const COLUMNS: { key: SortKey; label: string; numeric: boolean }[] = [
@@ -18,7 +20,11 @@ const COLUMNS: { key: SortKey; label: string; numeric: boolean }[] = [
   { key: 'count', label: '거래량', numeric: true },
 ];
 
-export function ComplexRankingTable({ rows, onAddComplex }: ComplexRankingTableProps) {
+export function ComplexRankingTable({
+  rows,
+  onAddComplex,
+  onSelectComplex,
+}: ComplexRankingTableProps) {
   const [query, setQuery] = useState('');
   const [sortKey, setSortKey] = useState<SortKey>('rank');
   const [asc, setAsc] = useState(true);
@@ -89,9 +95,19 @@ export function ComplexRankingTable({ rows, onAddComplex }: ComplexRankingTableP
                       >
                         {r.rank}
                       </span>
-                      <span className="truncate" title={r.aptName}>
-                        {r.aptName}
-                      </span>
+                      {onSelectComplex ? (
+                        <button
+                          className="truncate text-left hover:text-[var(--sr-accent)] hover:underline"
+                          title={r.aptName}
+                          onClick={() => onSelectComplex(r.aptName)}
+                        >
+                          {r.aptName}
+                        </button>
+                      ) : (
+                        <span className="truncate" title={r.aptName}>
+                          {r.aptName}
+                        </span>
+                      )}
                     </div>
                   </td>
                   <td className="sr-num whitespace-nowrap px-3 py-2.5 text-right">

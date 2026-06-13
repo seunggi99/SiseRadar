@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { useAuth } from './lib/auth';
+import { ComparePage } from './pages/ComparePage';
 import { DashboardPage } from './pages/DashboardPage';
 import { LoginPage } from './pages/LoginPage';
 import { WatchlistPage } from './pages/WatchlistPage';
@@ -13,6 +14,7 @@ function App() {
   return (
     <Routes>
       <Route path="/" element={<DashboardPage />} />
+      <Route path="/compare" element={<ComparePage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route
         path="/watchlist"

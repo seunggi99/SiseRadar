@@ -17,6 +17,15 @@ export function useComplexRanking(lawdCd: string, ym?: string) {
   });
 }
 
+/** All transactions for one complex (across collected months) — for the detail view. */
+export function useComplexTrades(lawdCd: string, aptName: string | null) {
+  return useQuery({
+    queryKey: ['complexTrades', lawdCd, aptName],
+    queryFn: () => api.trades({ lawdCd, aptName: aptName!, size: 200 }),
+    enabled: aptName !== null,
+  });
+}
+
 // ── watchlist ──
 export function useWatchlist(enabled: boolean) {
   return useQuery({
