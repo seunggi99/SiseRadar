@@ -1,12 +1,16 @@
 import { useState } from 'react';
-import { useComplexRanking, useMonthlyStats } from '../api/hooks';
+import { useNavigate } from 'react-router-dom';
+import { ApiError } from '../api/client';
+import { useAddWatchlist, useComplexRanking, useMonthlyStats } from '../api/hooks';
 import { ComplexRankingTable } from '../components/ComplexRankingTable';
 import { Header } from '../components/Header';
 import { KpiCard } from '../components/KpiCard';
 import { RegionSelector } from '../components/RegionSelector';
 import { EmptyState, ErrorState, LoadingState } from '../components/StateViews';
 import { TrendChart } from '../components/TrendChart';
+import { useAuth } from '../lib/auth';
 import { directionColor } from '../lib/colors';
+import { useToast } from '../lib/toast';
 import {
   formatCount,
   formatEok,
@@ -22,8 +26,44 @@ export function DashboardPage() {
   const monthly = useMonthlyStats(lawdCd);
   const ranking = useComplexRanking(lawdCd);
 
+  const { isAuthenticated } = useAuth();
+  const { toast } = useToast();
+  const navigate = useNavigate();
+  const addWatchlist = useAddWatchlist();
+
   const stats = monthly.data ?? [];
   const latest = stats.length ? stats[stats.length - 1] : null;
+
+  function requireLogin(): boolean {
+    if (isAuthenticated) return true;
+    toast('관심 등록은 로그인이 필요해요');
+    navigate('/login');
+    return false;
+  }
+
+  function addRegion() {
+    if (!requireLogin()) return;
+    addWatchlist.mutate(
+      { type: 'REGION', lawdCd },
+      {
+        onSuccess: () => toast(`${regionName(lawdCd)} 관심 지역 추가됨`),
+        onError: (e) =>
+          toast(e instanceof ApiError && e.status === 409 ? '이미 추가된 지역이에요' : '추가 실패', 'error'),
+      },
+    );
+  }
+
+  function addComplex(aptName: string) {
+    if (!requireLogin()) return;
+    addWatchlist.mutate(
+      { type: 'COMPLEX', lawdCd, aptName },
+      {
+        onSuccess: () => toast(`${aptName} 관심 단지 추가됨`),
+        onError: (e) =>
+          toast(e instanceof ApiError && e.status === 409 ? '이미 추가된 단지예요' : '추가 실패', 'error'),
+      },
+    );
+  }
 
   return (
     <div className="min-h-screen">
@@ -39,6 +79,9 @@ export function DashboardPage() {
             {latest && (
               <span className="sr-muted text-sm">기준 {formatYmLong(latest.ym)}</span>
             )}
+            <button className="sr-input text-sm" onClick={addRegion} title="이 지역을 관심목록에 추가">
+              + 관심 지역
+            </button>
             <RegionSelector value={lawdCd} onChange={setLawdCd} />
           </div>
         </div>
@@ -97,7 +140,7 @@ export function DashboardPage() {
               ) : ranking.isError ? (
                 <ErrorState onRetry={() => ranking.refetch()} />
               ) : (
-                <ComplexRankingTable rows={ranking.data ?? []} />
+                <ComplexRankingTable rows={ranking.data ?? []} onAddComplex={addComplex} />
               )}
             </section>
           </div>

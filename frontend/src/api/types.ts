@@ -38,3 +38,36 @@ export interface ComplexRank {
   maxAmount: number;
   avgPricePerPyeong: number;
 }
+
+// ── auth / watchlist / alerts / notifications ──────────────────────────────
+export type WatchType = 'REGION' | 'COMPLEX';
+export type AlertCondition = 'NEW_TRADE' | 'PRICE_CHANGE_PCT';
+
+export interface AuthResponse {
+  token: string;
+  email: string;
+}
+
+export interface WatchlistItem {
+  id: number;
+  type: WatchType;
+  lawdCd: string;
+  aptName: string | null;
+  label: string;
+  createdAt: string;
+}
+
+export interface AlertRule {
+  id: number;
+  watchlistId: number;
+  condition: AlertCondition;
+  threshold: number | null;
+  createdAt: string;
+}
+
+export interface NotificationItem {
+  id: number;
+  message: string;
+  read: boolean;
+  createdAt: string;
+}

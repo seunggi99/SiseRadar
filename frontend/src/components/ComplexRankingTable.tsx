@@ -6,6 +6,8 @@ type SortKey = 'rank' | 'avgAmount' | 'count' | 'avgPricePerPyeong' | 'maxAmount
 
 interface ComplexRankingTableProps {
   rows: ComplexRank[];
+  /** When provided, each row shows a "관심 추가" button calling this with the complex name. */
+  onAddComplex?: (aptName: string) => void;
 }
 
 const COLUMNS: { key: SortKey; label: string; numeric: boolean }[] = [
@@ -16,7 +18,7 @@ const COLUMNS: { key: SortKey; label: string; numeric: boolean }[] = [
   { key: 'count', label: '거래량', numeric: true },
 ];
 
-export function ComplexRankingTable({ rows }: ComplexRankingTableProps) {
+export function ComplexRankingTable({ rows, onAddComplex }: ComplexRankingTableProps) {
   const [query, setQuery] = useState('');
   const [sortKey, setSortKey] = useState<SortKey>('rank');
   const [asc, setAsc] = useState(true);
@@ -69,6 +71,7 @@ export function ComplexRankingTable({ rows }: ComplexRankingTableProps) {
                     {sortKey === col.key && <span className="ml-1">{asc ? '↑' : '↓'}</span>}
                   </th>
                 ))}
+                {onAddComplex && <th className="px-3 py-2.5" aria-label="관심 추가" />}
               </tr>
             </thead>
             <tbody>
@@ -103,11 +106,22 @@ export function ComplexRankingTable({ rows }: ComplexRankingTableProps) {
                   <td className="sr-num whitespace-nowrap px-3 py-2.5 text-right sr-muted">
                     {formatCount(r.count)}
                   </td>
+                  {onAddComplex && (
+                    <td className="px-2 py-2.5 text-right">
+                      <button
+                        className="sr-muted text-xs hover:text-[var(--sr-accent)]"
+                        title="관심 단지 추가"
+                        onClick={() => onAddComplex(r.aptName)}
+                      >
+                        + 관심
+                      </button>
+                    </td>
+                  )}
                 </tr>
               ))}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="sr-muted px-3 py-8 text-center text-sm">
+                  <td colSpan={onAddComplex ? 6 : 5} className="sr-muted px-3 py-8 text-center text-sm">
                     검색 결과가 없어요.
                   </td>
                 </tr>
