@@ -30,6 +30,7 @@ public class TradeController {
   @Operation(summary = "지역/기간/면적 필터로 실거래를 페이지 조회한다")
   public PageResponse<TradeResponse> trades(
       @RequestParam String lawdCd,
+      @RequestParam(required = false) String aptName,
       @RequestParam(required = false) String from,
       @RequestParam(required = false) String to,
       @RequestParam(required = false) BigDecimal areaMin,
@@ -39,7 +40,9 @@ public class TradeController {
     int safeSize = Math.min(Math.max(size, 1), MAX_SIZE);
     Page<TradeResponse> result =
         repository
-            .search(lawdCd, from, to, areaMin, areaMax, PageRequest.of(Math.max(page, 0), safeSize))
+            .search(
+                lawdCd, aptName, from, to, areaMin, areaMax,
+                PageRequest.of(Math.max(page, 0), safeSize))
             .map(TradeResponse::from);
     return PageResponse.of(result);
   }

@@ -19,6 +19,7 @@ public interface AptTradeRepository extends JpaRepository<AptTrade, Long> {
       """
       SELECT t FROM AptTrade t
       WHERE t.lawdCd = :lawdCd
+        AND (:aptName IS NULL OR t.aptName = :aptName)
         AND (:from IS NULL OR t.dealYmd >= :from)
         AND (:to IS NULL OR t.dealYmd <= :to)
         AND (:areaMin IS NULL OR t.area >= :areaMin)
@@ -27,6 +28,7 @@ public interface AptTradeRepository extends JpaRepository<AptTrade, Long> {
       """)
   Page<AptTrade> search(
       @Param("lawdCd") String lawdCd,
+      @Param("aptName") String aptName,
       @Param("from") String from,
       @Param("to") String to,
       @Param("areaMin") BigDecimal areaMin,
