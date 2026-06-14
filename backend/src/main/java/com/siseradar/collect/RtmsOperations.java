@@ -24,7 +24,10 @@ public final class RtmsOperations {
               "RTMSDataSvcAptRent/getRTMSDataSvcAptRent");
 
   /** Currently collected combinations. */
-  public static final List<TypePair> ENABLED = List.of(new TypePair(PropertyType.APT, TradeType.SALE));
+  public static final List<TypePair> ENABLED =
+      List.of(
+          new TypePair(PropertyType.APT, TradeType.SALE),
+          new TypePair(PropertyType.APT, TradeType.RENT));
 
   public static String operationPath(PropertyType propertyType, TradeType tradeType) {
     String op = OPS.get(new TypePair(propertyType, tradeType));
