@@ -74,6 +74,15 @@ export interface ComplexRank {
   avgMonthlyRent: number | null;
 }
 
+export interface ComplexChange {
+  fromYm: string | null;
+  toYm: string | null;
+  matchedComplexes: number;
+  sameStoreAvgChangePct: number | null;
+  sameStoreMedianChangePct: number | null;
+  naiveChangePct: number | null;
+}
+
 // ── auth / watchlist / alerts / notifications ──────────────────────────────
 export type WatchType = 'REGION' | 'COMPLEX';
 export type AlertCondition = 'NEW_TRADE' | 'PRICE_CHANGE_PCT';

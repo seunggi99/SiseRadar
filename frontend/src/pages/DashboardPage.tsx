@@ -4,12 +4,14 @@ import { ApiError } from '../api/client';
 import {
   useAddWatchlist,
   useCollectRegion,
+  useComplexChange,
   useComplexRanking,
   useMonthlyStats,
   useRegionStatus,
 } from '../api/hooks';
 import type { PropertyType, TradeType } from '../api/types';
 import { AreaBandBreakdown } from '../components/AreaBandBreakdown';
+import { ComplexChangePanel } from '../components/ComplexChangePanel';
 import { ComplexDetailModal } from '../components/ComplexDetailModal';
 import { ComplexRankingTable } from '../components/ComplexRankingTable';
 import { Header } from '../components/Header';
@@ -54,6 +56,15 @@ export function DashboardPage() {
   // on-demand collection: regions with no data trigger a background 24-month backfill
   const stats = monthly.data ?? [];
   const noData = !monthly.isLoading && !monthly.isError && stats.length === 0;
+  // same-store change over the loaded data range (building-name types only)
+  const change = useComplexChange(
+    lawdCd,
+    propertyType,
+    tradeType,
+    stats[0]?.ym,
+    stats[stats.length - 1]?.ym,
+    propertyMeta(propertyType).hasRanking && stats.length >= 2,
+  );
   const regionStatus = useRegionStatus(lawdCd, noData);
   const collectRegion = useCollectRegion();
   const triggered = useRef<Set<string>>(new Set());
@@ -183,6 +194,9 @@ export function DashboardPage() {
                 }
               />
             </section>
+
+            {/* same-complex (composition-controlled) trend */}
+            {change.data && <ComplexChangePanel data={change.data} />}
 
             {/* trend chart */}
             <section className="sr-card">

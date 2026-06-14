@@ -3,12 +3,16 @@ package com.siseradar.web;
 import com.siseradar.domain.PropertyType;
 import com.siseradar.domain.TradeType;
 import com.siseradar.repository.BandStatRow;
+import com.siseradar.repository.ComplexChangeRow;
 import com.siseradar.repository.ComplexRankRow;
 import com.siseradar.repository.MonthlyStatRow;
 import com.siseradar.repository.RealEstateTransactionRepository;
+import com.siseradar.web.dto.ComplexChangeResponse;
 import com.siseradar.web.dto.ComplexRankResponse;
 import com.siseradar.web.dto.MonthlyStatsResponse;
 import com.siseradar.web.dto.MonthlyStatsResponse.BandStat;
+import java.time.YearMonth;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -94,5 +98,51 @@ public class StatsService {
               row.getAvgMonthlyRent() == null ? null : Math.round(row.getAvgMonthlyRent())));
     }
     return out;
+  }
+
+  private static final DateTimeFormatter YM = DateTimeFormatter.ofPattern("yyyyMM");
+
+  /**
+   * 동일 단지 변동률: 두 시점에 모두 거래된 같은 건물+평형대만 골라 단위면적가 % 변동의
+   * 평균·중위를 계산(구성 편향 통제). to 미지정 시 최신월, from 미지정 시 그 12개월 전.
+   */
+  public ComplexChangeResponse complexChange(
+      String lawdCd, PropertyType pt, TradeType tt, String from, String to) {
+    String toYm = (to == null || to.isBlank()) ? repository.latestYmd(lawdCd, pt, tt) : to;
+    if (toYm == null) {
+      return new ComplexChangeResponse(null, null, 0, null, null, null);
+    }
+    String fromYm =
+        (from == null || from.isBlank())
+            ? YearMonth.parse(toYm, YM).minusMonths(12).format(YM)
+            : from;
+
+    List<ComplexChangeRow> rows = repository.complexChange(lawdCd, pt.name(), tt.name(), fromYm, toYm);
+    List<Double> pcts =
+        rows.stream()
+            .filter(r -> r.getFromAvg() != 0)
+            .map(r -> (r.getToAvg() - r.getFromAvg()) / r.getFromAvg() * 100.0)
+            .sorted()
+            .toList();
+
+    Double avg = pcts.isEmpty() ? null : round1(pcts.stream().mapToDouble(d -> d).average().orElse(0));
+    Double median = pcts.isEmpty() ? null : round1(pcts.get(pcts.size() / 2));
+
+    // naive contrast: region-wide avg 단위면적가 change between the same two months
+    Map<String, Double> regionAvg =
+        repository.monthlyStats(lawdCd, pt.name(), tt.name(), fromYm, toYm).stream()
+            .collect(Collectors.toMap(MonthlyStatRow::getYm, MonthlyStatRow::getAvgPricePerArea));
+    Double naive = null;
+    Double f = regionAvg.get(fromYm);
+    Double t = regionAvg.get(toYm);
+    if (f != null && t != null && f != 0) {
+      naive = round1((t - f) / f * 100.0);
+    }
+
+    return new ComplexChangeResponse(fromYm, toYm, pcts.size(), avg, median, naive);
+  }
+
+  private static Double round1(double v) {
+    return Math.round(v * 10.0) / 10.0;
   }
 }

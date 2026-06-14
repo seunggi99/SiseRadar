@@ -2,6 +2,7 @@ package com.siseradar.web;
 
 import com.siseradar.domain.PropertyType;
 import com.siseradar.domain.TradeType;
+import com.siseradar.web.dto.ComplexChangeResponse;
 import com.siseradar.web.dto.ComplexRankResponse;
 import com.siseradar.web.dto.MonthlyStatsResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -42,5 +43,16 @@ public class StatsController {
       @RequestParam(required = false, defaultValue = "SALE") TradeType tradeType,
       @RequestParam(required = false) String ym) {
     return statsService.complexes(lawdCd, propertyType, tradeType, ym);
+  }
+
+  @GetMapping("/complex-change")
+  @Operation(summary = "동일 단지(건물+평형대) 변동률 — 구성 편향 통제한 진짜 추세")
+  public ComplexChangeResponse complexChange(
+      @RequestParam String lawdCd,
+      @RequestParam(required = false, defaultValue = "APT") PropertyType propertyType,
+      @RequestParam(required = false, defaultValue = "SALE") TradeType tradeType,
+      @RequestParam(required = false) String from,
+      @RequestParam(required = false) String to) {
+    return statsService.complexChange(lawdCd, propertyType, tradeType, from, to);
   }
 }

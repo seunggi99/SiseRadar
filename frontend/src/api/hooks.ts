@@ -22,6 +22,22 @@ export function useComplexRanking(
   });
 }
 
+/** Same-complex (building + area-band) change over a period — composition-controlled trend. */
+export function useComplexChange(
+  lawdCd: string,
+  propertyType: PropertyType,
+  tradeType: TradeType,
+  from: string | undefined,
+  to: string | undefined,
+  enabled: boolean,
+) {
+  return useQuery({
+    queryKey: ['complexChange', lawdCd, propertyType, tradeType, from, to],
+    queryFn: () => api.complexChange(lawdCd, propertyType, tradeType, from, to),
+    enabled,
+  });
+}
+
 /** All transactions for one complex (across collected months) — for the detail view. */
 export function useComplexTrades(
   lawdCd: string,

@@ -126,6 +126,41 @@ public interface RealEstateTransactionRepository extends JpaRepository<RealEstat
       @Param("tt") String tradeType,
       @Param("ym") String ym);
 
+  /**
+   * Same-complex change: (building, area-band) cells traded in BOTH {@code fromYm} and {@code toYm},
+   * with each cell's avg 단위면적가 (만원/㎡) per month. Controls composition bias — only matched
+   * 건물+평형대 are compared. Service computes the % change per cell.
+   */
+  @Query(
+      value =
+          """
+          SELECT t.building_name AS buildingName,
+                 CASE WHEN t.area <= 60 THEN 'SMALL'
+                      WHEN t.area <= 85 THEN 'MID_SMALL'
+                      WHEN t.area <= 135 THEN 'MID_LARGE'
+                      ELSE 'LARGE' END AS band,
+                 AVG(CASE WHEN t.deal_ymd = :fromYm THEN COALESCE(t.deal_amount, t.deposit) / NULLIF(t.area, 0) END) AS fromAvg,
+                 AVG(CASE WHEN t.deal_ymd = :toYm   THEN COALESCE(t.deal_amount, t.deposit) / NULLIF(t.area, 0) END) AS toAvg
+          FROM real_estate_transaction t
+          WHERE t.lawd_cd = :lawdCd AND t.property_type = :pt AND t.trade_type = :tt
+            AND t.building_name IS NOT NULL
+            AND t.deal_ymd IN (:fromYm, :toYm)
+          GROUP BY t.building_name,
+                 CASE WHEN t.area <= 60 THEN 'SMALL'
+                      WHEN t.area <= 85 THEN 'MID_SMALL'
+                      WHEN t.area <= 135 THEN 'MID_LARGE'
+                      ELSE 'LARGE' END
+          HAVING COUNT(CASE WHEN t.deal_ymd = :fromYm THEN 1 END) > 0
+             AND COUNT(CASE WHEN t.deal_ymd = :toYm THEN 1 END) > 0
+          """,
+      nativeQuery = true)
+  List<ComplexChangeRow> complexChange(
+      @Param("lawdCd") String lawdCd,
+      @Param("pt") String propertyType,
+      @Param("tt") String tradeType,
+      @Param("fromYm") String fromYm,
+      @Param("toYm") String toYm);
+
   @Query(
       "SELECT MAX(t.dealYmd) FROM RealEstateTransaction t "
           + "WHERE t.lawdCd = :lawdCd AND t.propertyType = :pt AND t.tradeType = :tt")

@@ -2,6 +2,7 @@ import type {
   AlertCondition,
   AlertRule,
   AuthResponse,
+  ComplexChange,
   ComplexRank,
   MonthlyStats,
   NotificationItem,
@@ -102,6 +103,17 @@ export const api = {
   complexRanking: (lawdCd: string, propertyType: PropertyType, tradeType: TradeType, ym?: string) =>
     request<ComplexRank[]>('GET', '/api/stats/complexes', {
       params: { lawdCd, propertyType, tradeType, ym },
+    }),
+
+  complexChange: (
+    lawdCd: string,
+    propertyType: PropertyType,
+    tradeType: TradeType,
+    from?: string,
+    to?: string,
+  ) =>
+    request<ComplexChange>('GET', '/api/stats/complex-change', {
+      params: { lawdCd, propertyType, tradeType, from, to },
     }),
 
   trades: (params: {
