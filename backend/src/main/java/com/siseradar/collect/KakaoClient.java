@@ -69,14 +69,48 @@ public class KakaoClient {
 
   public record LatLng(double lat, double lng) {}
 
-  /** Forward geocode (keyword search) → first result's coordinate, or null if none. */
-  public LatLng geocode(String query) {
+  /** A geocoded place: coordinate + the address string Kakao returned (for 시군구 validation). */
+  public record GeoPlace(double lat, double lng, String addressName) {}
+
+  /**
+   * Forward geocode a building (keyword search) → first result's coordinate + address, or null.
+   * The {@code addressName} (e.g. "경기 성남시 분당구 정자동 …") lets the caller verify the 시군구
+   * in a single call — no separate reverse-geocode needed.
+   */
+  public GeoPlace geocodePlace(String query) {
+    Place p = firstPlace("https://dapi.kakao.com/v2/local/search/keyword.json?size=1&query=", query);
+    if (p == null) {
+      return null;
+    }
+    try {
+      return new GeoPlace(Double.parseDouble(p.y), Double.parseDouble(p.x), p.addressName);
+    } catch (NumberFormatException e) {
+      return null;
+    }
+  }
+
+  /**
+   * Forward geocode a region name via address search → its centroid, or null. Address search
+   * returns a clean REGION point (used once per 시군구 for the map bubble centroid).
+   */
+  public LatLng geocodeAddress(String query) {
+    Place p = firstPlace("https://dapi.kakao.com/v2/local/search/address.json?size=1&query=", query);
+    if (p == null) {
+      return null;
+    }
+    try {
+      return new LatLng(Double.parseDouble(p.y), Double.parseDouble(p.x));
+    } catch (NumberFormatException e) {
+      return null;
+    }
+  }
+
+  /** First document from a Kakao search endpoint, or null on any error/empty. */
+  private Place firstPlace(String baseUrl, String query) {
     if (props.restKey() == null || props.restKey().isBlank()) {
       return null;
     }
-    String url =
-        "https://dapi.kakao.com/v2/local/search/keyword.json?size=1&query="
-            + URLEncoder.encode(query, StandardCharsets.UTF_8);
+    String url = baseUrl + URLEncoder.encode(query, StandardCharsets.UTF_8);
     KeywordResponse res;
     try {
       res =
@@ -92,21 +126,7 @@ public class KakaoClient {
     if (res == null || res.documents == null || res.documents.isEmpty()) {
       return null;
     }
-    Place p = res.documents.get(0);
-    try {
-      return new LatLng(Double.parseDouble(p.y), Double.parseDouble(p.x));
-    } catch (NumberFormatException e) {
-      return null;
-    }
-  }
-
-  /** Reverse-resolve a coordinate to its 시군구 code, or null (no throw) — used for validation. */
-  public String lawdCdAt(double lng, double lat) {
-    try {
-      return coord2region(lng, lat).lawdCd();
-    } catch (RuntimeException e) {
-      return null;
-    }
+    return res.documents.get(0);
   }
 
   @JsonIgnoreProperties(ignoreUnknown = true)
@@ -126,6 +146,9 @@ public class KakaoClient {
 
     @JsonProperty("y")
     public String y; // lat
+
+    @JsonProperty("address_name")
+    public String addressName;
   }
 
   @JsonIgnoreProperties(ignoreUnknown = true)

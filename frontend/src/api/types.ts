@@ -84,6 +84,14 @@ export interface MapComplex {
   count: number;
 }
 
+/** Viewport bounding box (lat/lng) for fetching markers in view. */
+export interface Bounds {
+  swLat: number;
+  swLng: number;
+  neLat: number;
+  neLng: number;
+}
+
 export interface MapRegion {
   lawdCd: string;
   lat: number;

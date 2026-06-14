@@ -2,6 +2,7 @@ import type {
   AlertCondition,
   AlertRule,
   AuthResponse,
+  Bounds,
   ComplexChange,
   ComplexRank,
   MapComplex,
@@ -165,6 +166,27 @@ export const api = {
     ) =>
       request<MapComplex[]>('GET', '/api/map/complexes', {
         params: { lawdCd, propertyType, tradeType, from, to, band },
+      }),
+    complexesInBounds: (
+      b: Bounds,
+      propertyType: PropertyType,
+      tradeType: TradeType,
+      from?: string,
+      to?: string,
+      band?: string,
+    ) =>
+      request<MapComplex[]>('GET', '/api/map/complexes', {
+        params: {
+          swLat: b.swLat,
+          swLng: b.swLng,
+          neLat: b.neLat,
+          neLng: b.neLng,
+          propertyType,
+          tradeType,
+          from,
+          to,
+          band,
+        },
       }),
     regions: (
       propertyType: PropertyType,

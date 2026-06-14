@@ -1,7 +1,8 @@
 package com.siseradar.map;
 
 import com.siseradar.collect.KakaoClient;
-import com.siseradar.collect.KakaoClient.LatLng;
+import com.siseradar.collect.KakaoClient.GeoPlace;
+import com.siseradar.collect.KoreaRegions;
 import com.siseradar.domain.ComplexGeocode;
 import com.siseradar.domain.GeocodeStatus;
 import com.siseradar.domain.PropertyType;
@@ -16,9 +17,10 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Forward-geocodes one building in the background and caches the result. A geocoded point is only
- * accepted (SUCCESS) if it reverse-resolves back to the same 시군구 — guards against same-name
- * complexes in another 구. In-flight dedup via {@link #claim}.
+ * Forward-geocodes one building in the background and caches the result — in a single Kakao call.
+ * The geocoded point is accepted (SUCCESS) only if the returned address actually falls in the
+ * expected 시군구 (its address contains the region's 구/시/군 token) — guards against same-name
+ * complexes in another 구 without a second reverse-geocode call. In-flight dedup via {@link #claim}.
  */
 @Component
 public class MapGeocodeWorker {
@@ -27,11 +29,14 @@ public class MapGeocodeWorker {
 
   private final KakaoClient kakao;
   private final ComplexGeocodeRepository repo;
+  private final KoreaRegions koreaRegions;
   private final Set<String> inFlight = ConcurrentHashMap.newKeySet();
 
-  public MapGeocodeWorker(KakaoClient kakao, ComplexGeocodeRepository repo) {
+  public MapGeocodeWorker(
+      KakaoClient kakao, ComplexGeocodeRepository repo, KoreaRegions koreaRegions) {
     this.kakao = kakao;
     this.repo = repo;
+    this.koreaRegions = koreaRegions;
   }
 
   public static String key(String lawdCd, PropertyType pt, String buildingName) {
@@ -53,15 +58,11 @@ public class MapGeocodeWorker {
       Double lng = null;
 
       String query = (umdNm == null ? "" : umdNm + " ") + buildingName;
-      LatLng ll = kakao.geocode(query);
-      if (ll != null) {
-        // accept only if the point is actually in the expected 시군구
-        String resolved = kakao.lawdCdAt(ll.lng(), ll.lat());
-        if (lawdCd.equals(resolved)) {
-          status = GeocodeStatus.SUCCESS;
-          lat = ll.lat();
-          lng = ll.lng();
-        }
+      GeoPlace gp = kakao.geocodePlace(query);
+      if (gp != null && inExpectedSigungu(lawdCd, gp.addressName())) {
+        status = GeocodeStatus.SUCCESS;
+        lat = gp.lat();
+        lng = gp.lng();
       }
       repo.save(new ComplexGeocode(lawdCd, pt, buildingName, lat, lng, status));
     } catch (DataIntegrityViolationException dup) {
@@ -76,5 +77,14 @@ public class MapGeocodeWorker {
     } finally {
       inFlight.remove(key);
     }
+  }
+
+  /** True if the geocoded address contains the region's 구/시/군 token (single-call validation). */
+  private boolean inExpectedSigungu(String lawdCd, String addressName) {
+    if (addressName == null) {
+      return false;
+    }
+    String token = koreaRegions.sigunguToken(lawdCd);
+    return token != null && addressName.contains(token);
   }
 }

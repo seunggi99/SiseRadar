@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client';
-import { useMapComplexes, useMapRegions } from '../api/hooks';
-import type { MapComplex, MapRegion } from '../api/types';
+import { useMapComplexesInBounds, useMapRegions } from '../api/hooks';
+import type { Bounds, MapComplex, MapRegion } from '../api/types';
 import { Header } from '../components/Header';
 import { PropertyTradeSelector } from '../components/PropertyTradeSelector';
 import { RadarSpinner } from '../components/RadarSpinner';
@@ -14,6 +14,8 @@ import { isKnownRegion, regionName } from '../lib/regions';
 
 // Kakao 레벨은 클수록 더 멀리(축소). 이 레벨 이상이면 지역 버블, 미만이면 단지 마커.
 const REGION_ZOOM = 8;
+// 버블 클릭/검색 점프 시 들어갈 단지 마커 줌.
+const MARKER_ZOOM = 5;
 
 function markerImage(kakao: any, color: string) {
   const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='18' height='18'><circle cx='9' cy='9' r='6.5' fill='${color}' stroke='white' stroke-opacity='0.9' stroke-width='1.5'/></svg>`;
@@ -39,17 +41,9 @@ function complexPopupHtml(c: MapComplex): string {
   </div>`;
 }
 
-function regionPopupHtml(r: MapRegion): string {
-  return `<div class="sr-surface" style="padding:8px 11px;font-size:12px;min-width:180px;transform:translateY(-14px);box-shadow:0 6px 20px rgba(0,0,0,.25)">
-    <div style="font-weight:500;margin-bottom:3px;color:var(--sr-text)">${escapeHtml(regionName(r.lawdCd))}</div>
-    <div class="sr-num" style="color:var(--sr-text)">평당(전용) 평균 ${pyeong(r.avgPricePerArea)}만 · 중위 ${pyeong(r.medianPricePerArea)}만</div>
-    <div class="sr-num" style="color:var(--sr-text-muted)">㎡당 ${sqm(r.avgPricePerArea)}만 · 전체 거래 ${r.count.toLocaleString('ko-KR')}건</div>
-  </div>`;
-}
-
 /** 버블 지름 — 거래량 기반(√ 스케일), 절대 색은 colorForArea가 결정. */
 function bubbleDiameter(count: number): number {
-  return Math.max(26, Math.min(64, Math.round(22 + Math.sqrt(count) * 0.9)));
+  return Math.max(28, Math.min(66, Math.round(24 + Math.sqrt(count) * 0.9)));
 }
 
 function bubbleElement(r: MapRegion, color: string, onClick: () => void): HTMLElement {
@@ -57,12 +51,29 @@ function bubbleElement(r: MapRegion, color: string, onClick: () => void): HTMLEl
   const el = document.createElement('div');
   el.style.cssText = `width:${d}px;height:${d}px;line-height:${d}px;border-radius:50%;background:${color};color:#06241f;font-size:11px;font-weight:700;text-align:center;border:1.5px solid rgba(255,255,255,0.85);box-shadow:0 2px 8px rgba(0,0,0,.25);cursor:pointer;font-variant-numeric:tabular-nums;`;
   el.textContent = r.count >= 1000 ? `${Math.round(r.count / 100) / 10}k` : String(r.count);
-  el.title = regionName(r.lawdCd);
+  el.title = `${regionName(r.lawdCd)} · 평당 ${pyeong(r.avgPricePerArea)}만 · ${r.count.toLocaleString('ko-KR')}건`;
   el.addEventListener('click', (e) => {
     e.stopPropagation();
     onClick();
   });
   return el;
+}
+
+/** 화면 bounds를 50% 패딩 + 반올림 — 가장자리 시군구도 잡고 쿼리 churn은 줄인다. */
+function paddedBounds(map: any): Bounds {
+  const b = map.getBounds();
+  const sw = b.getSouthWest();
+  const ne = b.getNorthEast();
+  const latSpan = ne.getLat() - sw.getLat();
+  const lngSpan = ne.getLng() - sw.getLng();
+  const pad = 0.5;
+  const round = (n: number) => Math.round(n * 1000) / 1000;
+  return {
+    swLat: round(sw.getLat() - latSpan * pad),
+    swLng: round(sw.getLng() - lngSpan * pad),
+    neLat: round(ne.getLat() + latSpan * pad),
+    neLng: round(ne.getLng() + lngSpan * pad),
+  };
 }
 
 export function MapPage() {
@@ -74,19 +85,28 @@ export function MapPage() {
   const clusterer = useRef<any>(null);
   const overlay = useRef<any>(null);
   const bubbleOverlays = useRef<any[]>([]);
-  const fittedKey = useRef<string>('');
+  const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState(false);
   const [level, setLevel] = useState(6);
+  const [bounds, setBounds] = useState<Bounds | null>(null);
 
   const showBubbles = level >= REGION_ZOOM;
   const hasMarkers = propertyMeta(propertyType).hasRanking; // 건물명 유형만 마커
 
-  const complexes = useMapComplexes(lawdCd, propertyType, tradeType, from, to, band ?? undefined);
+  const complexes = useMapComplexesInBounds(
+    bounds,
+    propertyType,
+    tradeType,
+    from,
+    to,
+    band ?? undefined,
+    hasMarkers && !showBubbles,
+  );
   const regions = useMapRegions(propertyType, tradeType, from, to, band ?? undefined);
   const markerData = useMemo(
-    () => (hasMarkers ? (complexes.data ?? []) : []),
-    [complexes.data, hasMarkers],
+    () => (hasMarkers && !showBubbles ? (complexes.data ?? []) : []),
+    [complexes.data, hasMarkers, showBubbles],
   );
   const regionData = regions.data ?? [];
 
@@ -98,7 +118,7 @@ export function MapPage() {
         if (cancelled || !mapRef.current) return;
         kakaoRef.current = kakao;
         const map = new kakao.maps.Map(mapRef.current, {
-          center: new kakao.maps.LatLng(37.5665, 126.978),
+          center: new kakao.maps.LatLng(37.5172, 127.0473),
           level: 6,
         });
         restrictToKorea(kakao, map);
@@ -122,8 +142,17 @@ export function MapPage() {
         });
         mapObj.current = map;
         setLevel(map.getLevel());
+        setBounds(paddedBounds(map));
         setReady(true);
-        kakao.maps.event.addListener(map, 'zoom_changed', () => setLevel(map.getLevel()));
+
+        // 뷰포트가 멈출 때마다(패닝·줌) bbox·레벨 갱신 — 디바운스.
+        kakao.maps.event.addListener(map, 'idle', () => {
+          if (idleTimer.current) clearTimeout(idleTimer.current);
+          idleTimer.current = setTimeout(() => {
+            setLevel(map.getLevel());
+            setBounds(paddedBounds(map));
+          }, 350);
+        });
         kakao.maps.event.addListener(map, 'click', async (e: any) => {
           overlay.current?.setMap(null);
           const ll = e.latLng;
@@ -141,10 +170,11 @@ export function MapPage() {
       .catch(() => setError(true));
     return () => {
       cancelled = true;
+      if (idleTimer.current) clearTimeout(idleTimer.current);
     };
   }, [setLawdCd]);
 
-  // 단지 마커: 고줌(showBubbles=false)일 때만. 색은 고정 절대 스케일.
+  // 단지 마커: 고줌(showBubbles=false)일 때만. 색은 고정 절대 스케일. 뷰포트가 채우므로 fit 안 함.
   useEffect(() => {
     const kakao = kakaoRef.current;
     if (!ready || !kakao || !clusterer.current || !mapObj.current) return;
@@ -172,18 +202,9 @@ export function MapPage() {
       return marker;
     });
     clusterer.current.addMarkers(markers);
+  }, [markerData, ready, showBubbles, tradeType]);
 
-    // fit bounds once per region/filter change (not on every geocode-fill poll)
-    const key = `${lawdCd}:${propertyType}:${tradeType}`;
-    if (markerData.length > 0 && fittedKey.current !== key) {
-      const bounds = new kakao.maps.LatLngBounds();
-      markerData.forEach((c) => bounds.extend(new kakao.maps.LatLng(c.lat, c.lng)));
-      mapObj.current.setBounds(bounds);
-      fittedKey.current = key;
-    }
-  }, [markerData, ready, showBubbles, tradeType, lawdCd, propertyType]);
-
-  // 지역 버블: 저줌(showBubbles)일 때만. 마커와 같은 절대 색 스케일 공유.
+  // 지역 버블: 저줌(showBubbles)일 때만. 마커와 같은 절대 색 스케일 공유. 클릭 → 줌인 + 지역 동기화.
   useEffect(() => {
     const kakao = kakaoRef.current;
     if (!ready || !kakao || !mapObj.current) return;
@@ -195,14 +216,9 @@ export function MapPage() {
     overlay.current?.setMap(null);
     bubbleOverlays.current = regionData.map((r) => {
       const el = bubbleElement(r, colorForArea(r.avgPricePerArea, tradeType), () => {
-        overlay.current?.setMap(null);
-        overlay.current = new kakao.maps.CustomOverlay({
-          position: new kakao.maps.LatLng(r.lat, r.lng),
-          content: regionPopupHtml(r),
-          yAnchor: 1,
-          zIndex: 100,
-        });
-        overlay.current.setMap(mapObj.current);
+        setLawdCd(r.lawdCd); // 대시보드 선택 지역 동기화
+        mapObj.current.setCenter(new kakao.maps.LatLng(r.lat, r.lng));
+        mapObj.current.setLevel(MARKER_ZOOM); // 줌인 → 단지 마커로 전환
       });
       const ov = new kakao.maps.CustomOverlay({
         position: new kakao.maps.LatLng(r.lat, r.lng),
@@ -214,7 +230,18 @@ export function MapPage() {
       ov.setMap(mapObj.current);
       return ov;
     });
-  }, [regionData, ready, showBubbles, tradeType]);
+  }, [regionData, ready, showBubbles, tradeType, setLawdCd]);
+
+  // 검색 점프(보조): 지역 선택 + 좌표를 알면 그 지역으로 패닝·줌인.
+  const onJump = (jumpLawdCd: string) => {
+    setLawdCd(jumpLawdCd);
+    const kakao = kakaoRef.current;
+    const r = regionData.find((x) => x.lawdCd === jumpLawdCd);
+    if (kakao && mapObj.current && r) {
+      mapObj.current.setCenter(new kakao.maps.LatLng(r.lat, r.lng));
+      mapObj.current.setLevel(MARKER_ZOOM);
+    }
+  };
 
   const thresholds = scaleThresholds(tradeType);
   const unitLabel = tradeType === 'RENT' ? '보증금 ㎡당' : '평당가(전용)';
@@ -235,7 +262,7 @@ export function MapPage() {
               onPropertyChange={setProperty}
               onTradeChange={setTradeType}
             />
-            <RegionSearch onSelect={(r) => setLawdCd(r.lawdCd)} />
+            <RegionSearch onSelect={(r) => onJump(r.lawdCd)} />
           </div>
         </div>
 
@@ -258,7 +285,7 @@ export function MapPage() {
           {ready && (
             <div className="sr-surface absolute left-3 top-3 flex flex-col gap-1.5 px-3 py-2 text-xs" style={{ zIndex: 5 }}>
               <span className="sr-muted">
-                {unitLabel} · 만원/㎡ {showBubbles ? `· ${regionData.length}지역` : ''}
+                {unitLabel} · 만원/㎡ {showBubbles ? `· ${regionData.length}지역` : `· ${markerData.length}단지`}
               </span>
               <div className="flex items-end gap-0">
                 {TEAL_SHADES.map((s, i) => (
@@ -287,12 +314,12 @@ export function MapPage() {
           )}
           {hasMarkers && ready && !showBubbles && markerData.length === 0 && (
             <div className="absolute bottom-3 left-1/2 -translate-x-1/2 sr-surface px-3 py-1.5 text-xs sr-muted">
-              <RadarSpinner size={14} /> 단지 위치를 불러오는 중…
+              <RadarSpinner size={14} /> 이 화면의 단지 위치를 불러오는 중…
             </div>
           )}
           {showBubbles && ready && regionData.length === 0 && (
             <div className="absolute bottom-3 left-1/2 -translate-x-1/2 sr-surface px-3 py-1.5 text-xs sr-muted">
-              집계된 지역이 아직 없어요 (단지 지오코딩 후 채워져요)
+              <RadarSpinner size={14} /> 지역 집계를 불러오는 중…
             </div>
           )}
         </div>

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from './client';
-import type { AlertCondition, PropertyType, TradeType, WatchType } from './types';
+import type { AlertCondition, Bounds, PropertyType, TradeType, WatchType } from './types';
 
 // ── public ──
 export function useMonthlyStats(lawdCd: string, propertyType: PropertyType, tradeType: TradeType) {
@@ -70,7 +70,29 @@ export function useMapComplexes(
   });
 }
 
-/** Low-zoom region bubbles — 전체 거래 집계 + 캐시 좌표 centroid (카카오 0). 정적이라 폴링 없음. */
+/** High-zoom markers for the current viewport bbox. Lazy geocoding fills in over a few polls. */
+export function useMapComplexesInBounds(
+  bounds: Bounds | null,
+  propertyType: PropertyType,
+  tradeType: TradeType,
+  from: string | undefined,
+  to: string | undefined,
+  band: string | undefined,
+  enabled: boolean,
+) {
+  return useQuery({
+    queryKey: ['mapComplexesBbox', bounds, propertyType, tradeType, from, to, band],
+    queryFn: () => api.map.complexesInBounds(bounds!, propertyType, tradeType, from, to, band),
+    enabled: enabled && bounds !== null,
+    // bounded polling while background geocoding fills markers, then stop (Kakao quota 보호)
+    refetchInterval: (query) => (query.state.dataUpdateCount < 6 ? 8000 : false),
+  });
+}
+
+/**
+ * Low-zoom region bubbles — 전체 거래 집계 + 시군구 centroid 캐시. centroid가 처음엔 큐잉돼
+ * 비어 올 수 있어 몇 번만 폴링(1회성 지오코딩 후 채워짐).
+ */
 export function useMapRegions(
   propertyType: PropertyType,
   tradeType: TradeType,
@@ -81,6 +103,7 @@ export function useMapRegions(
   return useQuery({
     queryKey: ['mapRegions', propertyType, tradeType, from, to, band],
     queryFn: () => api.map.regions(propertyType, tradeType, from, to, band),
+    refetchInterval: (query) => (query.state.dataUpdateCount < 6 ? 4000 : false),
   });
 }
 

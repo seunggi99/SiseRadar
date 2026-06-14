@@ -22,14 +22,27 @@ public class MapController {
   }
 
   @GetMapping("/complexes")
-  @Operation(summary = "지오코딩된 단지 마커 (아파트·오피스텔·연립, 전용 단위면적가)")
+  @Operation(
+      summary = "단지 마커 (아파트·오피스텔·연립, 전용 단위면적가)",
+      description = "뷰포트 bbox(swLat/swLng/neLat/neLng)가 모두 주어지면 화면 안 시군구의 단지를, 아니면 lawdCd 한 지역의 단지를 반환")
   public List<MapComplexResponse> complexes(
-      @RequestParam String lawdCd,
+      @RequestParam(required = false) String lawdCd,
       @RequestParam(required = false, defaultValue = "APT") PropertyType propertyType,
       @RequestParam(required = false, defaultValue = "SALE") TradeType tradeType,
       @RequestParam(required = false) String from,
       @RequestParam(required = false) String to,
-      @RequestParam(required = false) String band) {
+      @RequestParam(required = false) String band,
+      @RequestParam(required = false) Double swLat,
+      @RequestParam(required = false) Double swLng,
+      @RequestParam(required = false) Double neLat,
+      @RequestParam(required = false) Double neLng) {
+    if (swLat != null && swLng != null && neLat != null && neLng != null) {
+      return mapService.complexesInBounds(
+          swLat, swLng, neLat, neLng, propertyType, tradeType, from, to, band);
+    }
+    if (lawdCd == null || lawdCd.isBlank()) {
+      return List.of();
+    }
     return mapService.complexes(lawdCd, propertyType, tradeType, from, to, band);
   }
 
