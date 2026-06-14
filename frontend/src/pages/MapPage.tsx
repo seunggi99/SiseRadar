@@ -10,7 +10,6 @@ import { useFilters } from '../lib/filters';
 import { isInKorea, loadKakao, restrictToKorea } from '../lib/kakaoMap';
 import { propertyMeta } from '../lib/propertyTypes';
 import { isKnownRegion, regionName } from '../lib/regions';
-import { useToast } from '../lib/toast';
 
 // teal sequential scale (light=low price → dark=high price). Never red/blue (those = up/down only).
 const TEAL_SHADES = ['#CDEFEA', '#8FD9CE', '#39C9B9', '#0E9E8F', '#0B5F56'];
@@ -51,7 +50,6 @@ function popupHtml(c: MapComplex): string {
 export function MapPage() {
   const { lawdCd, propertyType, tradeType, from, to, band, setLawdCd, setProperty, setTradeType } =
     useFilters();
-  const { toast } = useToast();
   const mapRef = useRef<HTMLDivElement>(null);
   const kakaoRef = useRef<any>(null);
   const mapObj = useRef<any>(null);
@@ -107,19 +105,14 @@ export function MapPage() {
         kakao.maps.event.addListener(map, 'click', async (e: any) => {
           overlay.current?.setMap(null);
           const ll = e.latLng;
-          if (!isInKorea(ll.getLat(), ll.getLng())) {
-            toast('국내 지역만 지원해요');
-            return;
-          }
+          // 지도 탐색 클릭: 유효한 남한 시군구로 해석될 때만 이동. 그 외(강·공원·미해석·
+          // 바다·국외)는 조용히 무시 — 안내 토스트는 검색/모달의 명시적 선택에서만.
+          if (!isInKorea(ll.getLat(), ll.getLng())) return;
           try {
             const r = await api.regions.resolve(ll.getLng(), ll.getLat());
-            if (!isKnownRegion(r.lawdCd)) {
-              toast('국내 지역만 지원해요');
-              return;
-            }
-            setLawdCd(r.lawdCd);
+            if (isKnownRegion(r.lawdCd)) setLawdCd(r.lawdCd);
           } catch {
-            toast('국내 지역만 지원해요');
+            /* 미해석·비마스터·국외 → no-op */
           }
         });
       })
@@ -127,7 +120,7 @@ export function MapPage() {
     return () => {
       cancelled = true;
     };
-  }, [setLawdCd, toast]);
+  }, [setLawdCd]);
 
   const colorScale = useMemo(() => makeColorScale(data.map((d) => d.avgPricePerArea)), [data]);
 

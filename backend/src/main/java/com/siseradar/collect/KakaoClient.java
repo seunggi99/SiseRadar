@@ -8,6 +8,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientException;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.http.HttpStatus;
 
@@ -33,13 +34,19 @@ public class KakaoClient {
     }
     String url =
         "https://dapi.kakao.com/v2/local/geo/coord2regioncode.json?x=" + x + "&y=" + y;
-    Coord2RegionResponse res =
-        restClient
-            .get()
-            .uri(URI.create(url))
-            .header("Authorization", "KakaoAK " + props.restKey())
-            .retrieve()
-            .body(Coord2RegionResponse.class);
+    Coord2RegionResponse res;
+    try {
+      res =
+          restClient
+              .get()
+              .uri(URI.create(url))
+              .header("Authorization", "KakaoAK " + props.restKey())
+              .retrieve()
+              .body(Coord2RegionResponse.class);
+    } catch (RestClientException e) {
+      // Kakao 오류(쿼터 초과 등)는 500이 아니라 일시 오류로
+      throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "지오코딩 서비스 일시 오류");
+    }
 
     if (res == null || res.documents == null || res.documents.isEmpty()) {
       throw new ResponseStatusException(HttpStatus.NOT_FOUND, "해당 좌표의 행정구역을 찾을 수 없습니다");

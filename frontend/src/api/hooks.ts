@@ -64,8 +64,9 @@ export function useMapComplexes(
   return useQuery({
     queryKey: ['mapComplexes', lawdCd, propertyType, tradeType, from, to, band],
     queryFn: () => api.map.complexes(lawdCd, propertyType, tradeType, from, to, band),
-    // poll while background geocoding fills markers in
-    refetchInterval: 6000,
+    // poll a bounded number of times while background geocoding fills markers, then stop
+    // (Kakao 무료 쿼터 보호). 지역/필터 변경 시 queryKey가 바뀌어 카운트가 리셋됨.
+    refetchInterval: (query) => (query.state.dataUpdateCount < 8 ? 8000 : false),
   });
 }
 
