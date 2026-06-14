@@ -70,6 +70,20 @@ export function useMapComplexes(
   });
 }
 
+/** Low-zoom region bubbles — 전체 거래 집계 + 캐시 좌표 centroid (카카오 0). 정적이라 폴링 없음. */
+export function useMapRegions(
+  propertyType: PropertyType,
+  tradeType: TradeType,
+  from: string | undefined,
+  to: string | undefined,
+  band: string | undefined,
+) {
+  return useQuery({
+    queryKey: ['mapRegions', propertyType, tradeType, from, to, band],
+    queryFn: () => api.map.regions(propertyType, tradeType, from, to, band),
+  });
+}
+
 // ── region on-demand collection ──
 export function useRegionStatus(lawdCd: string, enabled: boolean) {
   return useQuery({

@@ -32,4 +32,15 @@ public class MapController {
       @RequestParam(required = false) String band) {
     return mapService.complexes(lawdCd, propertyType, tradeType, from, to, band);
   }
+
+  @GetMapping("/regions")
+  @Operation(summary = "저줌 지역 버블 (전체 거래 기준 전용 단위면적가·거래량, 카카오 호출 0)")
+  public List<MapRegionResponse> regions(
+      @RequestParam(required = false, defaultValue = "APT") PropertyType propertyType,
+      @RequestParam(required = false, defaultValue = "SALE") TradeType tradeType,
+      @RequestParam(required = false) String from,
+      @RequestParam(required = false) String to,
+      @RequestParam(required = false) String band) {
+    return mapService.regions(propertyType, tradeType, from, to, band);
+  }
 }

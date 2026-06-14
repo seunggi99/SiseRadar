@@ -6,7 +6,9 @@ import com.siseradar.domain.PropertyType;
 import com.siseradar.domain.TradeType;
 import com.siseradar.repository.ComplexGeocodeRepository;
 import com.siseradar.repository.MapComplexStatRow;
+import com.siseradar.repository.MapRegionStatRow;
 import com.siseradar.repository.RealEstateTransactionRepository;
+import com.siseradar.repository.RegionCentroidRow;
 import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -14,6 +16,7 @@ import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 
@@ -95,6 +98,36 @@ public class MapService {
           launched++;
         }
       }
+    }
+    return out;
+  }
+
+  /**
+   * Low-zoom region bubbles. Stats are over ALL matching transactions (전체 거래, 지오코딩 무관),
+   * so volume matches the dashboard. Centroid = average of the region's cached complex coords
+   * (no Kakao calls); regions without any cached coord are skipped (until geocoded).
+   */
+  public List<MapRegionResponse> regions(
+      PropertyType pt, TradeType tt, String from, String to, String band) {
+    String bandFilter = (band == null || band.isBlank()) ? null : band;
+    Map<String, RegionCentroidRow> centroids =
+        geocodes.regionCentroids(pt.name()).stream()
+            .collect(Collectors.toMap(RegionCentroidRow::getLawdCd, Function.identity(), (a, b) -> a));
+
+    List<MapRegionResponse> out = new ArrayList<>();
+    for (MapRegionStatRow s : trades.regionStats(pt.name(), tt.name(), from, to, bandFilter)) {
+      RegionCentroidRow c = centroids.get(s.getLawdCd());
+      if (c == null) {
+        continue; // no coords yet → no bubble
+      }
+      out.add(
+          new MapRegionResponse(
+              s.getLawdCd(),
+              c.getLat(),
+              c.getLng(),
+              Math.round(s.getAvgPricePerArea()),
+              Math.round(s.getMedianPricePerArea()),
+              s.getCnt()));
     }
     return out;
   }

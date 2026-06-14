@@ -1,29 +1,19 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client';
-import { useMapComplexes } from '../api/hooks';
-import type { MapComplex } from '../api/types';
+import { useMapComplexes, useMapRegions } from '../api/hooks';
+import type { MapComplex, MapRegion } from '../api/types';
 import { Header } from '../components/Header';
 import { PropertyTradeSelector } from '../components/PropertyTradeSelector';
 import { RadarSpinner } from '../components/RadarSpinner';
 import { RegionSearch } from '../components/RegionSearch';
 import { useFilters } from '../lib/filters';
 import { isInKorea, loadKakao, restrictToKorea } from '../lib/kakaoMap';
+import { colorForArea, scaleThresholds, TEAL_SHADES } from '../lib/priceScale';
 import { propertyMeta } from '../lib/propertyTypes';
 import { isKnownRegion, regionName } from '../lib/regions';
 
-// teal sequential scale (light=low price → dark=high price). Never red/blue (those = up/down only).
-const TEAL_SHADES = ['#CDEFEA', '#8FD9CE', '#39C9B9', '#0E9E8F', '#0B5F56'];
-
-function makeColorScale(values: number[]): (v: number) => string {
-  if (values.length === 0) return () => TEAL_SHADES[2];
-  const sorted = [...values].sort((a, b) => a - b);
-  const q = (p: number) => sorted[Math.min(sorted.length - 1, Math.floor((sorted.length - 1) * p))];
-  const th = [q(0.2), q(0.4), q(0.6), q(0.8)];
-  return (v: number) => {
-    for (let i = 0; i < th.length; i++) if (v <= th[i]) return TEAL_SHADES[i];
-    return TEAL_SHADES[4];
-  };
-}
+// Kakao 레벨은 클수록 더 멀리(축소). 이 레벨 이상이면 지역 버블, 미만이면 단지 마커.
+const REGION_ZOOM = 8;
 
 function markerImage(kakao: any, color: string) {
   const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='18' height='18'><circle cx='9' cy='9' r='6.5' fill='${color}' stroke='white' stroke-opacity='0.9' stroke-width='1.5'/></svg>`;
@@ -38,13 +28,41 @@ function escapeHtml(s: string): string {
   return s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 }
 
-function popupHtml(c: MapComplex): string {
-  const pyeong = (v: number) => Math.round(v * 3.3058).toLocaleString('ko-KR');
+const pyeong = (v: number) => Math.round(v * 3.3058).toLocaleString('ko-KR');
+const sqm = (v: number) => Math.round(v).toLocaleString('ko-KR');
+
+function complexPopupHtml(c: MapComplex): string {
   return `<div class="sr-surface" style="padding:8px 11px;font-size:12px;min-width:160px;transform:translateY(-10px);box-shadow:0 6px 20px rgba(0,0,0,.25)">
     <div style="font-weight:500;margin-bottom:3px;color:var(--sr-text)">${escapeHtml(c.buildingName)}</div>
     <div class="sr-num" style="color:var(--sr-text)">평당(전용) 평균 ${pyeong(c.avgPricePerArea)}만 · 중위 ${pyeong(c.medianPricePerArea)}만</div>
-    <div class="sr-num" style="color:var(--sr-text-muted)">㎡당 ${Math.round(c.avgPricePerArea).toLocaleString('ko-KR')}만 · 거래 ${c.count}건</div>
+    <div class="sr-num" style="color:var(--sr-text-muted)">㎡당 ${sqm(c.avgPricePerArea)}만 · 거래 ${c.count}건</div>
   </div>`;
+}
+
+function regionPopupHtml(r: MapRegion): string {
+  return `<div class="sr-surface" style="padding:8px 11px;font-size:12px;min-width:180px;transform:translateY(-14px);box-shadow:0 6px 20px rgba(0,0,0,.25)">
+    <div style="font-weight:500;margin-bottom:3px;color:var(--sr-text)">${escapeHtml(regionName(r.lawdCd))}</div>
+    <div class="sr-num" style="color:var(--sr-text)">평당(전용) 평균 ${pyeong(r.avgPricePerArea)}만 · 중위 ${pyeong(r.medianPricePerArea)}만</div>
+    <div class="sr-num" style="color:var(--sr-text-muted)">㎡당 ${sqm(r.avgPricePerArea)}만 · 전체 거래 ${r.count.toLocaleString('ko-KR')}건</div>
+  </div>`;
+}
+
+/** 버블 지름 — 거래량 기반(√ 스케일), 절대 색은 colorForArea가 결정. */
+function bubbleDiameter(count: number): number {
+  return Math.max(26, Math.min(64, Math.round(22 + Math.sqrt(count) * 0.9)));
+}
+
+function bubbleElement(r: MapRegion, color: string, onClick: () => void): HTMLElement {
+  const d = bubbleDiameter(r.count);
+  const el = document.createElement('div');
+  el.style.cssText = `width:${d}px;height:${d}px;line-height:${d}px;border-radius:50%;background:${color};color:#06241f;font-size:11px;font-weight:700;text-align:center;border:1.5px solid rgba(255,255,255,0.85);box-shadow:0 2px 8px rgba(0,0,0,.25);cursor:pointer;font-variant-numeric:tabular-nums;`;
+  el.textContent = r.count >= 1000 ? `${Math.round(r.count / 100) / 10}k` : String(r.count);
+  el.title = regionName(r.lawdCd);
+  el.addEventListener('click', (e) => {
+    e.stopPropagation();
+    onClick();
+  });
+  return el;
 }
 
 export function MapPage() {
@@ -55,20 +73,22 @@ export function MapPage() {
   const mapObj = useRef<any>(null);
   const clusterer = useRef<any>(null);
   const overlay = useRef<any>(null);
+  const bubbleOverlays = useRef<any[]>([]);
   const fittedKey = useRef<string>('');
   const [ready, setReady] = useState(false);
   const [error, setError] = useState(false);
+  const [level, setLevel] = useState(6);
 
+  const showBubbles = level >= REGION_ZOOM;
   const hasMarkers = propertyMeta(propertyType).hasRanking; // 건물명 유형만 마커
-  const complexes = useMapComplexes(
-    lawdCd,
-    propertyType,
-    tradeType,
-    from,
-    to,
-    band ?? undefined,
+
+  const complexes = useMapComplexes(lawdCd, propertyType, tradeType, from, to, band ?? undefined);
+  const regions = useMapRegions(propertyType, tradeType, from, to, band ?? undefined);
+  const markerData = useMemo(
+    () => (hasMarkers ? (complexes.data ?? []) : []),
+    [complexes.data, hasMarkers],
   );
-  const data = useMemo(() => (hasMarkers ? (complexes.data ?? []) : []), [complexes.data, hasMarkers]);
+  const regionData = regions.data ?? [];
 
   // init map once
   useEffect(() => {
@@ -101,7 +121,9 @@ export function MapPage() {
           ],
         });
         mapObj.current = map;
+        setLevel(map.getLevel());
         setReady(true);
+        kakao.maps.event.addListener(map, 'zoom_changed', () => setLevel(map.getLevel()));
         kakao.maps.event.addListener(map, 'click', async (e: any) => {
           overlay.current?.setMap(null);
           const ll = e.latLng;
@@ -122,27 +144,26 @@ export function MapPage() {
     };
   }, [setLawdCd]);
 
-  const colorScale = useMemo(() => makeColorScale(data.map((d) => d.avgPricePerArea)), [data]);
-
-  // (re)build markers when data changes
+  // 단지 마커: 고줌(showBubbles=false)일 때만. 색은 고정 절대 스케일.
   useEffect(() => {
     const kakao = kakaoRef.current;
     if (!ready || !kakao || !clusterer.current || !mapObj.current) return;
 
-    overlay.current?.setMap(null);
     clusterer.current.clear();
+    if (showBubbles) return; // 저줌 → 마커 숨김(버블 모드)
 
-    const markers = data.map((c) => {
+    overlay.current?.setMap(null);
+    const markers = markerData.map((c) => {
       const marker = new kakao.maps.Marker({
         position: new kakao.maps.LatLng(c.lat, c.lng),
-        image: markerImage(kakao, colorScale(c.avgPricePerArea)),
+        image: markerImage(kakao, colorForArea(c.avgPricePerArea, tradeType)),
         title: c.buildingName,
       });
       kakao.maps.event.addListener(marker, 'click', () => {
         overlay.current?.setMap(null);
         overlay.current = new kakao.maps.CustomOverlay({
           position: marker.getPosition(),
-          content: popupHtml(c),
+          content: complexPopupHtml(c),
           yAnchor: 1,
           zIndex: 100,
         });
@@ -154,15 +175,49 @@ export function MapPage() {
 
     // fit bounds once per region/filter change (not on every geocode-fill poll)
     const key = `${lawdCd}:${propertyType}:${tradeType}`;
-    if (data.length > 0 && fittedKey.current !== key) {
+    if (markerData.length > 0 && fittedKey.current !== key) {
       const bounds = new kakao.maps.LatLngBounds();
-      data.forEach((c) => bounds.extend(new kakao.maps.LatLng(c.lat, c.lng)));
+      markerData.forEach((c) => bounds.extend(new kakao.maps.LatLng(c.lat, c.lng)));
       mapObj.current.setBounds(bounds);
       fittedKey.current = key;
     }
-  }, [data, ready, colorScale, lawdCd, propertyType, tradeType]);
+  }, [markerData, ready, showBubbles, tradeType, lawdCd, propertyType]);
 
-  const filling = hasMarkers && complexes.isFetched && data.length > 0;
+  // 지역 버블: 저줌(showBubbles)일 때만. 마커와 같은 절대 색 스케일 공유.
+  useEffect(() => {
+    const kakao = kakaoRef.current;
+    if (!ready || !kakao || !mapObj.current) return;
+
+    bubbleOverlays.current.forEach((o) => o.setMap(null));
+    bubbleOverlays.current = [];
+    if (!showBubbles) return;
+
+    overlay.current?.setMap(null);
+    bubbleOverlays.current = regionData.map((r) => {
+      const el = bubbleElement(r, colorForArea(r.avgPricePerArea, tradeType), () => {
+        overlay.current?.setMap(null);
+        overlay.current = new kakao.maps.CustomOverlay({
+          position: new kakao.maps.LatLng(r.lat, r.lng),
+          content: regionPopupHtml(r),
+          yAnchor: 1,
+          zIndex: 100,
+        });
+        overlay.current.setMap(mapObj.current);
+      });
+      const ov = new kakao.maps.CustomOverlay({
+        position: new kakao.maps.LatLng(r.lat, r.lng),
+        content: el,
+        yAnchor: 0.5,
+        xAnchor: 0.5,
+        zIndex: 50,
+      });
+      ov.setMap(mapObj.current);
+      return ov;
+    });
+  }, [regionData, ready, showBubbles, tradeType]);
+
+  const thresholds = scaleThresholds(tradeType);
+  const unitLabel = tradeType === 'RENT' ? '보증금 ㎡당' : '평당가(전용)';
 
   return (
     <div className="min-h-screen">
@@ -199,28 +254,45 @@ export function MapPage() {
             </div>
           )}
 
-          {/* color legend */}
-          {hasMarkers && (
+          {/* color legend — 마커·버블 공유 고정 절대 스케일 (₩/㎡ 구간) */}
+          {ready && (
             <div className="sr-surface absolute left-3 top-3 flex flex-col gap-1.5 px-3 py-2 text-xs" style={{ zIndex: 5 }}>
-              <span className="sr-muted">평당가(전용) {filling ? `· ${data.length}단지` : ''}</span>
-              <div className="flex items-center gap-1">
-                <span className="sr-muted">낮음</span>
-                {TEAL_SHADES.map((s) => (
-                  <span key={s} className="h-3 w-4 rounded-sm" style={{ background: s }} />
+              <span className="sr-muted">
+                {unitLabel} · 만원/㎡ {showBubbles ? `· ${regionData.length}지역` : ''}
+              </span>
+              <div className="flex items-end gap-0">
+                {TEAL_SHADES.map((s, i) => (
+                  <div key={s} className="flex flex-col items-center" style={{ width: 34 }}>
+                    <span className="h-3 w-full" style={{ background: s }} />
+                    <span className="sr-num sr-muted mt-0.5" style={{ fontSize: 10 }}>
+                      {i < thresholds.length ? thresholds[i].toLocaleString('ko-KR') : ''}
+                    </span>
+                  </div>
                 ))}
-                <span className="sr-muted">높음</span>
               </div>
             </div>
           )}
 
-          {!hasMarkers && ready && (
-            <div className="absolute bottom-3 left-1/2 -translate-x-1/2 sr-surface px-3 py-1.5 text-xs sr-muted">
-              이 유형은 개별 단지 위치를 제공하지 않아요 (지역 집계는 곧 추가)
+          {/* zoom hint */}
+          {ready && (
+            <div className="sr-surface absolute right-3 top-3 px-2.5 py-1 text-xs sr-muted" style={{ zIndex: 5 }}>
+              {showBubbles ? '지역 버블 — 확대하면 단지' : '단지 마커 — 축소하면 지역'}
             </div>
           )}
-          {hasMarkers && ready && data.length === 0 && (
+
+          {!hasMarkers && ready && !showBubbles && (
+            <div className="absolute bottom-3 left-1/2 -translate-x-1/2 sr-surface px-3 py-1.5 text-xs sr-muted">
+              이 유형은 개별 단지 위치를 제공하지 않아요 — 축소하면 지역 집계가 보여요
+            </div>
+          )}
+          {hasMarkers && ready && !showBubbles && markerData.length === 0 && (
             <div className="absolute bottom-3 left-1/2 -translate-x-1/2 sr-surface px-3 py-1.5 text-xs sr-muted">
               <RadarSpinner size={14} /> 단지 위치를 불러오는 중…
+            </div>
+          )}
+          {showBubbles && ready && regionData.length === 0 && (
+            <div className="absolute bottom-3 left-1/2 -translate-x-1/2 sr-surface px-3 py-1.5 text-xs sr-muted">
+              집계된 지역이 아직 없어요 (단지 지오코딩 후 채워져요)
             </div>
           )}
         </div>

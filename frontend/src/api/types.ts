@@ -84,6 +84,17 @@ export interface MapComplex {
   count: number;
 }
 
+export interface MapRegion {
+  lawdCd: string;
+  lat: number;
+  lng: number;
+  /** 전체 거래 기준 단위면적가 만원/㎡ (전용). 평당 = ×3.3058. */
+  avgPricePerArea: number;
+  medianPricePerArea: number;
+  /** 전체 거래량 (대시보드와 동일). */
+  count: number;
+}
+
 export interface ComplexChange {
   fromYm: string | null;
   toYm: string | null;

@@ -194,6 +194,36 @@ public interface RealEstateTransactionRepository extends JpaRepository<RealEstat
       @Param("to") String to,
       @Param("band") String band);
 
+  /**
+   * Per-region aggregate over ALL matching transactions (지오코딩 무관 — 전체 거래) for low-zoom
+   * bubbles. 전용 단위면적가 만원/㎡. from/to null = 전체 기간(대시보드와 동일).
+   */
+  @Query(
+      value =
+          """
+          SELECT t.lawd_cd AS lawdCd,
+                 COUNT(*) AS cnt,
+                 AVG(COALESCE(t.deal_amount, t.deposit) / NULLIF(t.area, 0)) AS avgPricePerArea,
+                 PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY COALESCE(t.deal_amount, t.deposit) / NULLIF(t.area, 0)) AS medianPricePerArea
+          FROM real_estate_transaction t
+          WHERE t.property_type = :pt AND t.trade_type = :tt
+            AND (:from IS NULL OR t.deal_ymd >= :from)
+            AND (:to IS NULL OR t.deal_ymd <= :to)
+            AND (:band IS NULL OR
+                 CASE WHEN t.area <= 60 THEN 'SMALL'
+                      WHEN t.area <= 85 THEN 'MID_SMALL'
+                      WHEN t.area <= 135 THEN 'MID_LARGE'
+                      ELSE 'LARGE' END = :band)
+          GROUP BY t.lawd_cd
+          """,
+      nativeQuery = true)
+  List<MapRegionStatRow> regionStats(
+      @Param("pt") String propertyType,
+      @Param("tt") String tradeType,
+      @Param("from") String from,
+      @Param("to") String to,
+      @Param("band") String band);
+
   @Query(
       "SELECT MAX(t.dealYmd) FROM RealEstateTransaction t "
           + "WHERE t.lawdCd = :lawdCd AND t.propertyType = :pt AND t.tradeType = :tt")
