@@ -8,16 +8,19 @@ import {
   useMonthlyStats,
   useRegionStatus,
 } from '../api/hooks';
+import type { PropertyType, TradeType } from '../api/types';
 import { ComplexDetailModal } from '../components/ComplexDetailModal';
 import { ComplexRankingTable } from '../components/ComplexRankingTable';
 import { Header } from '../components/Header';
 import { KpiCard } from '../components/KpiCard';
+import { PropertyTradeSelector } from '../components/PropertyTradeSelector';
 import { RegionMapModal } from '../components/RegionMapModal';
 import { RegionSearch } from '../components/RegionSearch';
 import { EmptyState, ErrorState, LoadingState } from '../components/StateViews';
 import { TrendChart } from '../components/TrendChart';
 import { useAuth } from '../lib/auth';
 import { directionColor } from '../lib/colors';
+import { amountLabel } from '../lib/propertyTypes';
 import { useToast } from '../lib/toast';
 import {
   formatCount,
@@ -31,10 +34,13 @@ import { DEFAULT_LAWD_CD, regionName } from '../lib/regions';
 
 export function DashboardPage() {
   const [lawdCd, setLawdCd] = useState(DEFAULT_LAWD_CD);
+  const [propertyType, setPropertyType] = useState<PropertyType>('APT');
+  const [tradeType, setTradeType] = useState<TradeType>('SALE');
   const [selectedComplex, setSelectedComplex] = useState<string | null>(null);
   const [mapOpen, setMapOpen] = useState(false);
-  const monthly = useMonthlyStats(lawdCd);
-  const ranking = useComplexRanking(lawdCd);
+  const monthly = useMonthlyStats(lawdCd, propertyType, tradeType);
+  const ranking = useComplexRanking(lawdCd, propertyType, tradeType);
+  const isRent = tradeType === 'RENT';
 
   // on-demand collection: regions with no data trigger a background 24-month backfill
   const stats = monthly.data ?? [];
@@ -120,6 +126,16 @@ export function DashboardPage() {
           </div>
         </div>
 
+        {/* property + trade type */}
+        <div className="mb-6">
+          <PropertyTradeSelector
+            propertyType={propertyType}
+            tradeType={tradeType}
+            onPropertyChange={setPropertyType}
+            onTradeChange={setTradeType}
+          />
+        </div>
+
         {monthly.isLoading ? (
           <LoadingState />
         ) : monthly.isError ? (
@@ -137,7 +153,7 @@ export function DashboardPage() {
             {/* KPI cards */}
             <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
               <KpiCard
-                label="이번 달 평균가"
+                label={isRent ? '이번 달 평균 보증금' : '이번 달 평균가'}
                 value={formatEok(latest.avgAmount)}
                 sub={formatManwon(latest.avgAmount)}
               />
@@ -146,13 +162,21 @@ export function DashboardPage() {
                 label="전월 대비"
                 value={latest.momChangePct === null ? '—' : formatPercent(latest.momChangePct)}
                 valueColor={directionColor(latest.momChangePct)}
-                sub="평균가 기준"
+                sub={isRent ? '보증금 기준' : '평균가 기준'}
               />
-              <KpiCard
-                label="평당가"
-                value={formatPyeongPrice(latest.avgPricePerPyeong)}
-                sub="전용면적 기준"
-              />
+              {isRent ? (
+                <KpiCard
+                  label="평균 월세"
+                  value={`${formatCount(latest.avgMonthlyRent ?? 0)}만`}
+                  sub="월세 평균"
+                />
+              ) : (
+                <KpiCard
+                  label="평당가"
+                  value={formatPyeongPrice(latest.avgPricePerPyeong)}
+                  sub="전용면적 기준"
+                />
+              )}
             </section>
 
             {/* trend chart */}
@@ -160,11 +184,11 @@ export function DashboardPage() {
               <div className="mb-4 flex items-center justify-between">
                 <h2 className="text-base font-medium">월별 추이</h2>
                 <span className="sr-muted text-xs">
-                  <span style={{ color: 'var(--sr-accent)' }}>●</span> 평균가&nbsp;&nbsp;
-                  <span className="opacity-60">▮</span> 거래량
+                  <span style={{ color: 'var(--sr-accent)' }}>●</span> {amountLabel(tradeType)}
+                  &nbsp;&nbsp;<span className="opacity-60">▮</span> 거래량
                 </span>
               </div>
-              <TrendChart data={stats} />
+              <TrendChart data={stats} amountLabel={amountLabel(tradeType)} />
             </section>
 
             {/* ranking table */}
@@ -180,6 +204,8 @@ export function DashboardPage() {
               ) : (
                 <ComplexRankingTable
                   rows={ranking.data ?? []}
+                  amountLabel={amountLabel(tradeType)}
+                  showMonthlyRent={isRent}
                   onAddComplex={addComplex}
                   onSelectComplex={setSelectedComplex}
                 />
@@ -189,7 +215,7 @@ export function DashboardPage() {
         ) : null}
 
         <footer className="sr-muted mt-10 text-center text-xs">
-          데이터 · 국토교통부 아파트 매매 실거래가 (data.go.kr)
+          데이터 · 국토교통부 아파트 매매·전월세 실거래가 (data.go.kr)
         </footer>
       </main>
 
@@ -197,6 +223,8 @@ export function DashboardPage() {
         <ComplexDetailModal
           lawdCd={lawdCd}
           aptName={selectedComplex}
+          propertyType={propertyType}
+          tradeType={tradeType}
           onClose={() => setSelectedComplex(null)}
           onAdd={addComplex}
         />

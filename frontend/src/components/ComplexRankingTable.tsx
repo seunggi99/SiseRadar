@@ -2,26 +2,24 @@ import { useMemo, useState } from 'react';
 import type { ComplexRank } from '../api/types';
 import { formatCount, formatEok, formatPyeongPrice } from '../lib/format';
 
-type SortKey = 'rank' | 'avgAmount' | 'count' | 'avgPricePerPyeong' | 'maxAmount';
+type SortKey = 'rank' | 'avgAmount' | 'count' | 'avgPricePerPyeong' | 'maxAmount' | 'avgMonthlyRent';
 
 interface ComplexRankingTableProps {
   rows: ComplexRank[];
+  /** Label for the primary amount column (e.g. "평균가" / "평균 보증금"). */
+  amountLabel?: string;
+  /** Show the 월세 column (rent). */
+  showMonthlyRent?: boolean;
   /** When provided, each row shows a "관심 추가" button calling this with the complex name. */
   onAddComplex?: (aptName: string) => void;
   /** When provided, the complex name becomes a button opening the detail view. */
   onSelectComplex?: (aptName: string) => void;
 }
 
-const COLUMNS: { key: SortKey; label: string; numeric: boolean }[] = [
-  { key: 'rank', label: '순위', numeric: false },
-  { key: 'avgAmount', label: '평균가', numeric: true },
-  { key: 'maxAmount', label: '최고가', numeric: true },
-  { key: 'avgPricePerPyeong', label: '평당가', numeric: true },
-  { key: 'count', label: '거래량', numeric: true },
-];
-
 export function ComplexRankingTable({
   rows,
+  amountLabel = '평균가',
+  showMonthlyRent = false,
   onAddComplex,
   onSelectComplex,
 }: ComplexRankingTableProps) {
@@ -29,14 +27,23 @@ export function ComplexRankingTable({
   const [sortKey, setSortKey] = useState<SortKey>('rank');
   const [asc, setAsc] = useState(true);
 
+  const columns: { key: SortKey; label: string }[] = [
+    { key: 'avgAmount', label: amountLabel },
+    { key: 'maxAmount', label: '최고가' },
+    { key: 'avgPricePerPyeong', label: '평당가' },
+    ...(showMonthlyRent ? [{ key: 'avgMonthlyRent' as SortKey, label: '월세' }] : []),
+    { key: 'count', label: '거래량' },
+  ];
+
   const filtered = useMemo(() => {
     const q = query.trim();
     const base = q ? rows.filter((r) => r.aptName.includes(q)) : rows;
-    const sorted = [...base].sort((a, b) => {
-      const diff = a[sortKey] - b[sortKey];
+    return [...base].sort((a, b) => {
+      const av = a[sortKey] ?? 0;
+      const bv = b[sortKey] ?? 0;
+      const diff = av - bv;
       return asc ? diff : -diff;
     });
-    return sorted;
   }, [rows, query, sortKey, asc]);
 
   function toggleSort(key: SortKey) {
@@ -44,10 +51,11 @@ export function ComplexRankingTable({
       setAsc((v) => !v);
     } else {
       setSortKey(key);
-      // ranks read best ascending; metrics most useful descending
       setAsc(key === 'rank');
     }
   }
+
+  const colSpan = 1 + columns.length + (onAddComplex ? 1 : 0);
 
   return (
     <div className="flex flex-col gap-3">
@@ -67,7 +75,7 @@ export function ComplexRankingTable({
             <thead className="sticky top-0" style={{ background: 'var(--sr-surface-2)' }}>
               <tr>
                 <th className="px-3 py-2.5 text-left font-medium sr-muted">단지</th>
-                {COLUMNS.filter((col) => col.key !== 'rank').map((col) => (
+                {columns.map((col) => (
                   <th
                     key={col.key}
                     className="cursor-pointer select-none whitespace-nowrap px-3 py-2.5 text-right font-medium sr-muted hover:text-[var(--sr-text)]"
@@ -82,11 +90,7 @@ export function ComplexRankingTable({
             </thead>
             <tbody>
               {filtered.map((r) => (
-                <tr
-                  key={r.aptName}
-                  className="border-t sr-divide"
-                  style={{ borderTopWidth: '0.5px' }}
-                >
+                <tr key={r.aptName} className="border-t sr-divide" style={{ borderTopWidth: '0.5px' }}>
                   <td className="px-3 py-2.5">
                     <div className="flex items-center gap-2.5">
                       <span
@@ -110,18 +114,15 @@ export function ComplexRankingTable({
                       )}
                     </div>
                   </td>
-                  <td className="sr-num whitespace-nowrap px-3 py-2.5 text-right">
-                    {formatEok(r.avgAmount)}
-                  </td>
-                  <td className="sr-num whitespace-nowrap px-3 py-2.5 text-right sr-muted">
-                    {formatEok(r.maxAmount)}
-                  </td>
-                  <td className="sr-num whitespace-nowrap px-3 py-2.5 text-right">
-                    {formatPyeongPrice(r.avgPricePerPyeong)}
-                  </td>
-                  <td className="sr-num whitespace-nowrap px-3 py-2.5 text-right sr-muted">
-                    {formatCount(r.count)}
-                  </td>
+                  <td className="sr-num whitespace-nowrap px-3 py-2.5 text-right">{formatEok(r.avgAmount)}</td>
+                  <td className="sr-num whitespace-nowrap px-3 py-2.5 text-right sr-muted">{formatEok(r.maxAmount)}</td>
+                  <td className="sr-num whitespace-nowrap px-3 py-2.5 text-right">{formatPyeongPrice(r.avgPricePerPyeong)}</td>
+                  {showMonthlyRent && (
+                    <td className="sr-num whitespace-nowrap px-3 py-2.5 text-right sr-muted">
+                      {formatCount(r.avgMonthlyRent ?? 0)}만
+                    </td>
+                  )}
+                  <td className="sr-num whitespace-nowrap px-3 py-2.5 text-right sr-muted">{formatCount(r.count)}</td>
                   {onAddComplex && (
                     <td className="px-2 py-2.5 text-right">
                       <button
@@ -137,7 +138,7 @@ export function ComplexRankingTable({
               ))}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={onAddComplex ? 6 : 5} className="sr-muted px-3 py-8 text-center text-sm">
+                  <td colSpan={colSpan} className="sr-muted px-3 py-8 text-center text-sm">
                     검색 결과가 없어요.
                   </td>
                 </tr>

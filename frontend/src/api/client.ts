@@ -6,9 +6,11 @@ import type {
   MonthlyStats,
   NotificationItem,
   PageResponse,
+  PropertyType,
   RegionStatus,
   ResolvedRegion,
   Trade,
+  TradeType,
   WatchlistItem,
   WatchType,
 } from './types';
@@ -86,14 +88,26 @@ async function request<T>(
 
 export const api = {
   // ── public ──
-  monthlyStats: (lawdCd: string, from?: string, to?: string) =>
-    request<MonthlyStats[]>('GET', '/api/stats/monthly', { params: { lawdCd, from, to } }),
+  monthlyStats: (
+    lawdCd: string,
+    propertyType: PropertyType,
+    tradeType: TradeType,
+    from?: string,
+    to?: string,
+  ) =>
+    request<MonthlyStats[]>('GET', '/api/stats/monthly', {
+      params: { lawdCd, propertyType, tradeType, from, to },
+    }),
 
-  complexRanking: (lawdCd: string, ym?: string) =>
-    request<ComplexRank[]>('GET', '/api/stats/complexes', { params: { lawdCd, ym } }),
+  complexRanking: (lawdCd: string, propertyType: PropertyType, tradeType: TradeType, ym?: string) =>
+    request<ComplexRank[]>('GET', '/api/stats/complexes', {
+      params: { lawdCd, propertyType, tradeType, ym },
+    }),
 
   trades: (params: {
     lawdCd: string;
+    propertyType?: PropertyType;
+    tradeType?: TradeType;
     aptName?: string;
     from?: string;
     to?: string;

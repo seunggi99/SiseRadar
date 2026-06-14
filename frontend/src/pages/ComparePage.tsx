@@ -27,10 +27,11 @@ export function ComparePage() {
   const c = chartColors(isDark);
   const [selected, setSelected] = useState<string[]>(['41135', '11680']);
 
+  // Compare is on 아파트 매매 for now.
   const results = useQueries({
     queries: selected.map((lawdCd) => ({
-      queryKey: ['monthly', lawdCd],
-      queryFn: () => api.monthlyStats(lawdCd),
+      queryKey: ['monthly', lawdCd, 'APT', 'SALE'],
+      queryFn: () => api.monthlyStats(lawdCd, 'APT', 'SALE'),
     })),
   });
 

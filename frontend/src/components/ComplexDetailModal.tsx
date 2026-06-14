@@ -10,7 +10,7 @@ import {
 } from 'recharts';
 import type { TooltipProps } from 'recharts';
 import { useComplexTrades } from '../api/hooks';
-import type { Trade } from '../api/types';
+import type { PropertyType, Trade, TradeType } from '../api/types';
 import { chartColors } from '../lib/colors';
 import { formatCount, formatEok, formatManwon, formatPyeongPrice } from '../lib/format';
 import { useTheme } from '../lib/theme';
@@ -19,15 +19,31 @@ import { LoadingState } from './StateViews';
 interface Props {
   lawdCd: string;
   aptName: string;
+  propertyType: PropertyType;
+  tradeType: TradeType;
   onClose: () => void;
   onAdd?: (aptName: string) => void;
 }
 
-export function ComplexDetailModal({ lawdCd, aptName, onClose, onAdd }: Props) {
+/** Primary amount (만원): 매매 거래가 / 전월세 보증금. */
+function primaryAmount(t: Trade): number {
+  return t.dealAmount ?? t.deposit ?? 0;
+}
+
+/** Per-transaction amount for the table/tooltip. */
+function rentLabel(t: Trade): string {
+  if (t.monthlyRent && t.monthlyRent > 0) {
+    return `${formatManwon(t.deposit ?? 0)} / 월 ${t.monthlyRent}만`;
+  }
+  return formatManwon(t.deposit ?? 0);
+}
+
+export function ComplexDetailModal({ lawdCd, aptName, propertyType, tradeType, onClose, onAdd }: Props) {
   const { isDark } = useTheme();
   const c = chartColors(isDark);
-  const query = useComplexTrades(lawdCd, aptName);
+  const query = useComplexTrades(lawdCd, aptName, propertyType, tradeType);
   const trades = query.data?.content ?? [];
+  const isRent = tradeType === 'RENT';
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -38,6 +54,7 @@ export function ComplexDetailModal({ lawdCd, aptName, onClose, onAdd }: Props) {
   }, [onClose]);
 
   const summary = computeSummary(trades);
+  const scatterData = trades.map((t) => ({ ...t, primary: primaryAmount(t) }));
 
   return (
     <div
@@ -63,10 +80,7 @@ export function ComplexDetailModal({ lawdCd, aptName, onClose, onAdd }: Props) {
           </div>
           <div className="flex items-center gap-2">
             {onAdd && (
-              <button
-                className="sr-input text-xs hover:text-[var(--sr-accent)]"
-                onClick={() => onAdd(aptName)}
-              >
+              <button className="sr-input text-xs hover:text-[var(--sr-accent)]" onClick={() => onAdd(aptName)}>
                 + 관심
               </button>
             )}
@@ -85,14 +99,18 @@ export function ComplexDetailModal({ lawdCd, aptName, onClose, onAdd }: Props) {
             {/* KPI row */}
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <Kpi label="거래" value={`${formatCount(summary.count)}건`} />
-              <Kpi label="평균가" value={formatEok(summary.avg)} />
-              <Kpi label="최고가" value={formatEok(summary.max)} />
-              <Kpi label="평당가" value={formatPyeongPrice(summary.avgPyeong)} />
+              <Kpi label={isRent ? '평균 보증금' : '평균가'} value={formatEok(summary.avg)} />
+              <Kpi label={isRent ? '최고 보증금' : '최고가'} value={formatEok(summary.max)} />
+              {isRent ? (
+                <Kpi label="평균 월세" value={`${Math.round(summary.avgMonthlyRent)}만`} />
+              ) : (
+                <Kpi label="평당가" value={formatPyeongPrice(summary.avgPyeong)} />
+              )}
             </div>
 
-            {/* area vs price scatter */}
+            {/* area vs amount scatter */}
             <div>
-              <h3 className="mb-2 text-sm font-medium">면적 · 가격 분포</h3>
+              <h3 className="mb-2 text-sm font-medium">면적 · {isRent ? '보증금' : '가격'} 분포</h3>
               <ResponsiveContainer width="100%" height={220}>
                 <ScatterChart margin={{ top: 8, right: 12, bottom: 4, left: 8 }}>
                   <CartesianGrid stroke={c.grid} />
@@ -108,8 +126,7 @@ export function ComplexDetailModal({ lawdCd, aptName, onClose, onAdd }: Props) {
                   />
                   <YAxis
                     type="number"
-                    dataKey="dealAmount"
-                    name="금액"
+                    dataKey="primary"
                     stroke={c.axis}
                     tick={{ fontSize: 11, fill: c.axis }}
                     tickLine={false}
@@ -117,8 +134,8 @@ export function ComplexDetailModal({ lawdCd, aptName, onClose, onAdd }: Props) {
                     width={44}
                     tickFormatter={(v: number) => formatEok(v)}
                   />
-                  <Tooltip content={<ScatterTooltip border={c.tooltipBorder} bg={c.tooltipBg} />} />
-                  <Scatter data={trades} fill={c.line} fillOpacity={0.7} isAnimationActive={false} />
+                  <Tooltip content={<ScatterTooltip border={c.tooltipBorder} bg={c.tooltipBg} isRent={isRent} />} />
+                  <Scatter data={scatterData} fill={c.line} fillOpacity={0.7} isAnimationActive={false} />
                 </ScatterChart>
               </ResponsiveContainer>
             </div>
@@ -133,7 +150,7 @@ export function ComplexDetailModal({ lawdCd, aptName, onClose, onAdd }: Props) {
                       <th className="px-2 py-2 text-left font-medium">거래일</th>
                       <th className="px-2 py-2 text-right font-medium">전용</th>
                       <th className="px-2 py-2 text-right font-medium">층</th>
-                      <th className="px-2 py-2 text-right font-medium">거래가</th>
+                      <th className="px-2 py-2 text-right font-medium">{isRent ? '보증금/월세' : '거래가'}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -144,7 +161,9 @@ export function ComplexDetailModal({ lawdCd, aptName, onClose, onAdd }: Props) {
                           {t.area}㎡<span className="sr-muted"> ({t.areaPyeong}평)</span>
                         </td>
                         <td className="sr-num px-2 py-2 text-right sr-muted">{t.floor}</td>
-                        <td className="sr-num px-2 py-2 text-right">{formatManwon(t.dealAmount)}</td>
+                        <td className="sr-num px-2 py-2 text-right">
+                          {isRent ? rentLabel(t) : formatManwon(t.dealAmount ?? 0)}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -172,6 +191,7 @@ interface Summary {
   avg: number;
   max: number;
   avgPyeong: number;
+  avgMonthlyRent: number;
   buildYear: number | null;
   umdNm: string | null;
 }
@@ -179,18 +199,15 @@ interface Summary {
 function computeSummary(trades: Trade[]): Summary | null {
   if (!trades.length) return null;
   const count = trades.length;
-  const avg = trades.reduce((s, t) => s + t.dealAmount, 0) / count;
-  const max = Math.max(...trades.map((t) => t.dealAmount));
-  const avgPyeong =
-    trades.reduce((s, t) => s + t.dealAmount / t.areaPyeong, 0) / count;
-  return {
-    count,
-    avg,
-    max,
-    avgPyeong,
-    buildYear: trades[0].buildYear,
-    umdNm: trades[0].umdNm,
-  };
+  const amounts = trades.map(primaryAmount);
+  const avg = amounts.reduce((s, v) => s + v, 0) / count;
+  const max = Math.max(...amounts);
+  const pyeongVals = trades
+    .filter((t) => t.areaPyeong && t.areaPyeong > 0)
+    .map((t) => primaryAmount(t) / (t.areaPyeong as number));
+  const avgPyeong = pyeongVals.length ? pyeongVals.reduce((s, v) => s + v, 0) / pyeongVals.length : 0;
+  const avgMonthlyRent = trades.reduce((s, t) => s + (t.monthlyRent ?? 0), 0) / count;
+  return { count, avg, max, avgPyeong, avgMonthlyRent, buildYear: trades[0].buildYear, umdNm: trades[0].umdNm };
 }
 
 function ScatterTooltip({
@@ -198,7 +215,8 @@ function ScatterTooltip({
   payload,
   bg,
   border,
-}: TooltipProps<number, string> & { bg: string; border: string }) {
+  isRent,
+}: TooltipProps<number, string> & { bg: string; border: string; isRent: boolean }) {
   if (!active || !payload?.length) return null;
   const t = payload[0].payload as Trade;
   return (
@@ -207,7 +225,7 @@ function ScatterTooltip({
       style={{ background: bg, border: `0.5px solid ${border}`, borderRadius: 8, padding: '8px 10px', color: 'var(--sr-text)' }}
     >
       <div>{t.area}㎡ · {t.floor}층</div>
-      <div>{formatManwon(t.dealAmount)}</div>
+      <div>{isRent ? rentLabel(t) : formatManwon(t.dealAmount ?? 0)}</div>
       <div className="sr-muted">{t.dealDate}</div>
     </div>
   );

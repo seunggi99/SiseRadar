@@ -1,27 +1,37 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from './client';
-import type { AlertCondition, WatchType } from './types';
+import type { AlertCondition, PropertyType, TradeType, WatchType } from './types';
 
 // ── public ──
-export function useMonthlyStats(lawdCd: string) {
+export function useMonthlyStats(lawdCd: string, propertyType: PropertyType, tradeType: TradeType) {
   return useQuery({
-    queryKey: ['monthly', lawdCd],
-    queryFn: () => api.monthlyStats(lawdCd),
+    queryKey: ['monthly', lawdCd, propertyType, tradeType],
+    queryFn: () => api.monthlyStats(lawdCd, propertyType, tradeType),
   });
 }
 
-export function useComplexRanking(lawdCd: string, ym?: string) {
+export function useComplexRanking(
+  lawdCd: string,
+  propertyType: PropertyType,
+  tradeType: TradeType,
+  ym?: string,
+) {
   return useQuery({
-    queryKey: ['complexes', lawdCd, ym ?? 'latest'],
-    queryFn: () => api.complexRanking(lawdCd, ym),
+    queryKey: ['complexes', lawdCd, propertyType, tradeType, ym ?? 'latest'],
+    queryFn: () => api.complexRanking(lawdCd, propertyType, tradeType, ym),
   });
 }
 
 /** All transactions for one complex (across collected months) — for the detail view. */
-export function useComplexTrades(lawdCd: string, aptName: string | null) {
+export function useComplexTrades(
+  lawdCd: string,
+  aptName: string | null,
+  propertyType: PropertyType,
+  tradeType: TradeType,
+) {
   return useQuery({
-    queryKey: ['complexTrades', lawdCd, aptName],
-    queryFn: () => api.trades({ lawdCd, aptName: aptName!, size: 200 }),
+    queryKey: ['complexTrades', lawdCd, aptName, propertyType, tradeType],
+    queryFn: () => api.trades({ lawdCd, propertyType, tradeType, aptName: aptName!, size: 200 }),
     enabled: aptName !== null,
   });
 }

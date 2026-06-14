@@ -18,6 +18,8 @@ import { useTheme } from '../lib/theme';
 
 interface TrendChartProps {
   data: MonthlyStats[];
+  /** Label for the primary amount line (e.g. "평균가" / "평균 보증금"). */
+  amountLabel?: string;
 }
 
 const RANGES = [
@@ -29,7 +31,7 @@ const RANGES = [
 
 type RangeKey = (typeof RANGES)[number]['key'];
 
-export function TrendChart({ data }: TrendChartProps) {
+export function TrendChart({ data, amountLabel = '평균가' }: TrendChartProps) {
   const { isDark } = useTheme();
   const c = chartColors(isDark);
   const [range, setRange] = useState<RangeKey>('12m');
@@ -58,8 +60,9 @@ export function TrendChart({ data }: TrendChartProps) {
         <div className="mb-1 font-medium">
           {d.ym.slice(0, 4)}.{d.ym.slice(4, 6)}
         </div>
-        <div>평균가 {formatManwon(d.avgAmount)}</div>
+        <div>{amountLabel} {formatManwon(d.avgAmount)}</div>
         <div>거래량 {formatCount(d.count)}건</div>
+        {d.avgMonthlyRent != null && <div>평균 월세 {formatManwon(d.avgMonthlyRent)}</div>}
         <div>평당가 {formatManwon(d.avgPricePerPyeong)}/평</div>
       </div>
     );
