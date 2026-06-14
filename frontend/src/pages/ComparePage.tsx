@@ -15,7 +15,14 @@ import type { MonthlyStats } from '../api/types';
 import { Header } from '../components/Header';
 import { RegionSearch } from '../components/RegionSearch';
 import { COMPARE_COLORS, chartColors } from '../lib/colors';
-import { formatCount, formatEok, formatManwon, formatPercent, formatYmShort } from '../lib/format';
+import {
+  formatCount,
+  formatEok,
+  formatManwon,
+  formatPercent,
+  formatPerPyeong,
+  formatYmShort,
+} from '../lib/format';
 import { directionColor } from '../lib/colors';
 import { regionName } from '../lib/regions';
 import { useTheme } from '../lib/theme';
@@ -181,7 +188,7 @@ export function ComparePage() {
                           <>
                             <td className="sr-num px-3 py-2.5 text-right">{formatEok(latest.avgAmount)}</td>
                             <td className="sr-num px-3 py-2.5 text-right">{formatEok(latest.medianAmount)}</td>
-                            <td className="sr-num px-3 py-2.5 text-right">{formatCount(latest.avgPricePerPyeong)}만/평</td>
+                            <td className="sr-num px-3 py-2.5 text-right">{formatPerPyeong(latest.avgPricePerArea)}</td>
                             <td className="sr-num px-3 py-2.5 text-right">{formatCount(latest.count)}</td>
                             <td
                               className="sr-num px-3 py-2.5 text-right"

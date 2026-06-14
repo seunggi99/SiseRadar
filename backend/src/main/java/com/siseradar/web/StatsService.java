@@ -28,23 +28,25 @@ public class StatsService {
       String lawdCd, PropertyType pt, TradeType tt, String from, String to) {
     List<MonthlyStatRow> rows = repository.monthlyStats(lawdCd, pt.name(), tt.name(), from, to);
     List<MonthlyStatsResponse> out = new ArrayList<>(rows.size());
-    Double prevAvg = null;
+    // MoM is based on the median 단위면적가 (less composition-biased than avg 거래가).
+    Double prevMedianPerArea = null;
     for (MonthlyStatRow row : rows) {
-      double avg = row.getAvgAmount();
+      double medPerArea = row.getMedianPricePerArea();
       Double mom =
-          prevAvg != null && prevAvg != 0
-              ? Math.round((avg - prevAvg) / prevAvg * 1000.0) / 10.0
+          prevMedianPerArea != null && prevMedianPerArea != 0
+              ? Math.round((medPerArea - prevMedianPerArea) / prevMedianPerArea * 1000.0) / 10.0
               : null;
       out.add(
           new MonthlyStatsResponse(
               row.getYm(),
               row.getCnt(),
-              Math.round(avg),
+              Math.round(row.getAvgAmount()),
               Math.round(row.getMedianAmount()),
-              Math.round(row.getAvgPricePerPyeong()),
+              Math.round(row.getAvgPricePerArea()),
+              Math.round(row.getMedianPricePerArea()),
               row.getAvgMonthlyRent() == null ? null : Math.round(row.getAvgMonthlyRent()),
               mom));
-      prevAvg = avg;
+      prevMedianPerArea = medPerArea;
     }
     return out;
   }

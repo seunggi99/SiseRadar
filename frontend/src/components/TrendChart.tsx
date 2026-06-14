@@ -13,7 +13,14 @@ import {
 import type { TooltipProps } from 'recharts';
 import type { MonthlyStats } from '../api/types';
 import { chartColors } from '../lib/colors';
-import { formatCount, formatEok, formatManwon, formatYmShort } from '../lib/format';
+import {
+  formatCount,
+  formatEok,
+  formatManwon,
+  formatPerPyeong,
+  formatPerSqm,
+  formatYmShort,
+} from '../lib/format';
 import { useTheme } from '../lib/theme';
 
 interface TrendChartProps {
@@ -60,10 +67,11 @@ export function TrendChart({ data, amountLabel = '평균가' }: TrendChartProps)
         <div className="mb-1 font-medium">
           {d.ym.slice(0, 4)}.{d.ym.slice(4, 6)}
         </div>
-        <div>{amountLabel} {formatManwon(d.avgAmount)}</div>
+        <div>{amountLabel} {formatManwon(d.avgAmount)} <span className="sr-muted">(참고용)</span></div>
         <div>거래량 {formatCount(d.count)}건</div>
         {d.avgMonthlyRent != null && <div>평균 월세 {formatManwon(d.avgMonthlyRent)}</div>}
-        <div>평당가 {formatManwon(d.avgPricePerPyeong)}/평</div>
+        <div>평당가(전용) 평균 {formatPerPyeong(d.avgPricePerArea)} · 중위 {formatPerPyeong(d.medianPricePerArea)}</div>
+        <div className="sr-muted">㎡당 평균 {formatPerSqm(d.avgPricePerArea)}</div>
       </div>
     );
   };

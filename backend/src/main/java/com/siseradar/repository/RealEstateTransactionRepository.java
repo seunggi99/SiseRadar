@@ -53,7 +53,8 @@ public interface RealEstateTransactionRepository extends JpaRepository<RealEstat
                  COUNT(*) AS cnt,
                  AVG(COALESCE(t.deal_amount, t.deposit)) AS avgAmount,
                  PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY COALESCE(t.deal_amount, t.deposit)) AS medianAmount,
-                 AVG(COALESCE(t.deal_amount, t.deposit) / (t.area / 3.305785)) AS avgPricePerPyeong,
+                 AVG(COALESCE(t.deal_amount, t.deposit) / NULLIF(t.area, 0)) AS avgPricePerArea,
+                 PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY COALESCE(t.deal_amount, t.deposit) / NULLIF(t.area, 0)) AS medianPricePerArea,
                  AVG(t.monthly_rent) AS avgMonthlyRent
           FROM real_estate_transaction t
           WHERE t.lawd_cd = :lawdCd AND t.property_type = :pt AND t.trade_type = :tt
@@ -77,7 +78,7 @@ public interface RealEstateTransactionRepository extends JpaRepository<RealEstat
                  COUNT(*) AS cnt,
                  AVG(COALESCE(t.deal_amount, t.deposit)) AS avgAmount,
                  MAX(COALESCE(t.deal_amount, t.deposit)) AS maxAmount,
-                 AVG(COALESCE(t.deal_amount, t.deposit) / (t.area / 3.305785)) AS avgPricePerPyeong,
+                 AVG(COALESCE(t.deal_amount, t.deposit) / (t.area / 3.3058)) AS avgPricePerPyeong,
                  AVG(t.monthly_rent) AS avgMonthlyRent
           FROM real_estate_transaction t
           WHERE t.lawd_cd = :lawdCd AND t.property_type = :pt AND t.trade_type = :tt AND t.deal_ymd = :ym

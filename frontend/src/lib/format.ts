@@ -1,5 +1,23 @@
 // All money values arrive in 만원.
 
+/** 1평 = 3.3058㎡ (전용 기준). */
+export const PYEONG_PER_SQM = 3.3058;
+
+/** 만원/㎡ → 만원/평 (전용 기준). */
+export function perAreaToPyeong(perArea: number): number {
+  return Math.round(perArea * PYEONG_PER_SQM);
+}
+
+/** "1,811만/㎡" */
+export function formatPerSqm(perArea: number): string {
+  return `${Math.round(perArea).toLocaleString('ko-KR')}만/㎡`;
+}
+
+/** "5,988만/평" (전용 기준) */
+export function formatPerPyeong(perArea: number): string {
+  return `${perAreaToPyeong(perArea).toLocaleString('ko-KR')}만/평`;
+}
+
 /** Compact price, e.g. 152138 → "15.2억", 9580 → "9,580만". */
 export function formatEok(manwon: number): string {
   if (manwon >= 10000) {

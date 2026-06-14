@@ -27,8 +27,9 @@ import {
   formatEok,
   formatManwon,
   formatPercent,
-  formatPyeongPrice,
+  formatPerPyeong,
   formatYmLong,
+  perAreaToPyeong,
 } from '../lib/format';
 import { DEFAULT_LAWD_CD, regionName } from '../lib/regions';
 
@@ -160,7 +161,7 @@ export function DashboardPage() {
             {/* KPI cards */}
             <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
               <KpiCard
-                label={isRent ? '이번 달 평균 보증금' : '이번 달 평균가'}
+                label={isRent ? '평균 보증금 (참고용)' : '평균 거래가 (참고용)'}
                 value={formatEok(latest.avgAmount)}
                 sub={formatManwon(latest.avgAmount)}
               />
@@ -169,21 +170,17 @@ export function DashboardPage() {
                 label="전월 대비"
                 value={latest.momChangePct === null ? '—' : formatPercent(latest.momChangePct)}
                 valueColor={directionColor(latest.momChangePct)}
-                sub={isRent ? '보증금 기준' : '평균가 기준'}
+                sub="중위 ㎡당 기준"
               />
-              {isRent ? (
-                <KpiCard
-                  label="평균 월세"
-                  value={`${formatCount(latest.avgMonthlyRent ?? 0)}만`}
-                  sub="월세 평균"
-                />
-              ) : (
-                <KpiCard
-                  label="평당가"
-                  value={formatPyeongPrice(latest.avgPricePerPyeong)}
-                  sub="전용면적 기준"
-                />
-              )}
+              <KpiCard
+                label={isRent ? '보증금 평당 (전용)' : '평당가 (전용)'}
+                value={formatPerPyeong(latest.avgPricePerArea)}
+                sub={
+                  isRent
+                    ? `중위 ${perAreaToPyeong(latest.medianPricePerArea).toLocaleString('ko-KR')} · 월세 ${latest.avgMonthlyRent ?? 0}만`
+                    : `중위 ${perAreaToPyeong(latest.medianPricePerArea).toLocaleString('ko-KR')} · ㎡당 ${Math.round(latest.avgPricePerArea).toLocaleString('ko-KR')}만`
+                }
+              />
             </section>
 
             {/* trend chart */}

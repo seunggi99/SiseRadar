@@ -14,12 +14,15 @@ export type TradeType = 'SALE' | 'RENT';
 export interface MonthlyStats {
   ym: string;
   count: number;
-  /** Primary amount (만원): 매매 거래가 / 전월세 보증금. */
+  /** Primary amount (만원): 매매 거래가 / 전월세 보증금. 거래 구성에 휘둘리는 참고용. */
   avgAmount: number;
   medianAmount: number;
-  avgPricePerPyeong: number;
+  /** 단위면적가 평균/중위 — 만원/㎡ (전용면적 기준). 평당 = ×3.3058. */
+  avgPricePerArea: number;
+  medianPricePerArea: number;
   /** 평균 월세 (만원) — null for SALE. */
   avgMonthlyRent: number | null;
+  /** 전월 대비 중위 단위면적가 변화율 (%). */
   momChangePct: number | null;
 }
 
