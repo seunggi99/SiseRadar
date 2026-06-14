@@ -105,24 +105,23 @@ public class KakaoClient {
     }
   }
 
-  /** First document from a Kakao search endpoint, or null on any error/empty. */
+  /**
+   * First document from a Kakao search endpoint, or null when the lookup genuinely has no result.
+   * Transient HTTP errors (quota exceeded, network) propagate as {@link RestClientException} so the
+   * caller can avoid caching a permanent failure for a temporary problem.
+   */
   private Place firstPlace(String baseUrl, String query) {
     if (props.restKey() == null || props.restKey().isBlank()) {
       return null;
     }
     String url = baseUrl + URLEncoder.encode(query, StandardCharsets.UTF_8);
-    KeywordResponse res;
-    try {
-      res =
-          restClient
-              .get()
-              .uri(URI.create(url))
-              .header("Authorization", "KakaoAK " + props.restKey())
-              .retrieve()
-              .body(KeywordResponse.class);
-    } catch (RuntimeException e) {
-      return null;
-    }
+    KeywordResponse res =
+        restClient
+            .get()
+            .uri(URI.create(url))
+            .header("Authorization", "KakaoAK " + props.restKey())
+            .retrieve()
+            .body(KeywordResponse.class); // RestClientException on HTTP error → propagate
     if (res == null || res.documents == null || res.documents.isEmpty()) {
       return null;
     }

@@ -32,6 +32,8 @@ function escapeHtml(s: string): string {
 
 const pyeong = (v: number) => Math.round(v * 3.3058).toLocaleString('ko-KR');
 const sqm = (v: number) => Math.round(v).toLocaleString('ko-KR');
+/** 큰 수는 "2.9k"로 압축 — 버블·클러스터 라벨 공용(둘 다 거래 건수 단위). */
+const compact = (n: number) => (n >= 1000 ? `${Math.round(n / 100) / 10}k` : String(n));
 
 function complexPopupHtml(c: MapComplex): string {
   return `<div class="sr-surface" style="padding:8px 11px;font-size:12px;min-width:160px;transform:translateY(-10px);box-shadow:0 6px 20px rgba(0,0,0,.25)">
@@ -49,9 +51,10 @@ function bubbleDiameter(count: number): number {
 function bubbleElement(r: MapRegion, color: string, onClick: () => void): HTMLElement {
   const d = bubbleDiameter(r.count);
   const el = document.createElement('div');
-  el.style.cssText = `width:${d}px;height:${d}px;line-height:${d}px;border-radius:50%;background:${color};color:#06241f;font-size:11px;font-weight:700;text-align:center;border:1.5px solid rgba(255,255,255,0.85);box-shadow:0 2px 8px rgba(0,0,0,.25);cursor:pointer;font-variant-numeric:tabular-nums;`;
-  el.textContent = r.count >= 1000 ? `${Math.round(r.count / 100) / 10}k` : String(r.count);
-  el.title = `${regionName(r.lawdCd)} · 평당 ${pyeong(r.avgPricePerArea)}만 · ${r.count.toLocaleString('ko-KR')}건`;
+  el.style.cssText = `display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1;width:${d}px;height:${d}px;border-radius:50%;background:${color};color:#06241f;text-align:center;border:1.5px solid rgba(255,255,255,0.85);box-shadow:0 2px 8px rgba(0,0,0,.25);cursor:pointer;font-variant-numeric:tabular-nums;`;
+  // 라벨 단위를 명시: "거래 / 2.9k" — 지역 버블도 단지 클러스터도 '거래 건수'로 통일.
+  el.innerHTML = `<span style="font-size:8px;opacity:.7;margin-bottom:1px">거래</span><span style="font-size:11px;font-weight:700">${compact(r.count)}</span>`;
+  el.title = `${regionName(r.lawdCd)} · 평당 ${pyeong(r.avgPricePerArea)}만 · 거래 ${r.count.toLocaleString('ko-KR')}건`;
   el.addEventListener('click', (e) => {
     e.stopPropagation();
     onClick();
@@ -141,6 +144,19 @@ export function MapPage() {
           ],
         });
         mapObj.current = map;
+
+        // 클러스터 라벨을 '단지 수'가 아니라 '클러스터에 속한 단지들의 거래 건수 합'으로 덮어쓴다
+        // → 지역 버블(거래량)과 같은 단위. 'clustered'는 매 redraw 후 발생하므로 매번 재적용된다.
+        kakao.maps.event.addListener(clusterer.current, 'clustered', (clusters: any[]) => {
+          clusters.forEach((cluster) => {
+            const sum = cluster
+              .getMarkers()
+              .reduce((s: number, m: any) => s + (m.txCount ?? 0), 0);
+            const content = cluster._content; // clusterer 1.1.1: 라벨 DOM
+            if (content && 'innerHTML' in content) content.innerHTML = compact(sum);
+          });
+        });
+
         setLevel(map.getLevel());
         setBounds(paddedBounds(map));
         setReady(true);
@@ -189,6 +205,7 @@ export function MapPage() {
         image: markerImage(kakao, colorForArea(c.avgPricePerArea, tradeType)),
         title: c.buildingName,
       });
+      (marker as any).txCount = c.count; // 클러스터 거래합 계산용
       kakao.maps.event.addListener(marker, 'click', () => {
         overlay.current?.setMap(null);
         overlay.current = new kakao.maps.CustomOverlay({
@@ -245,6 +262,7 @@ export function MapPage() {
 
   const thresholds = scaleThresholds(tradeType);
   const unitLabel = tradeType === 'RENT' ? '보증금 ㎡당' : '평당가(전용)';
+  const markerTxSum = markerData.reduce((s, c) => s + c.count, 0);
 
   return (
     <div className="min-h-screen">
@@ -285,7 +303,10 @@ export function MapPage() {
           {ready && (
             <div className="sr-surface absolute left-3 top-3 flex flex-col gap-1.5 px-3 py-2 text-xs" style={{ zIndex: 5 }}>
               <span className="sr-muted">
-                {unitLabel} · 만원/㎡ {showBubbles ? `· ${regionData.length}지역` : `· ${markerData.length}단지`}
+                {unitLabel} · 만원/㎡{' '}
+                {showBubbles
+                  ? `· ${regionData.length}지역`
+                  : `· 거래 ${markerTxSum.toLocaleString('ko-KR')}건 (지오코딩된 단지 기준)`}
               </span>
               <div className="flex items-end gap-0">
                 {TEAL_SHADES.map((s, i) => (
@@ -303,7 +324,7 @@ export function MapPage() {
           {/* zoom hint */}
           {ready && (
             <div className="sr-surface absolute right-3 top-3 px-2.5 py-1 text-xs sr-muted" style={{ zIndex: 5 }}>
-              {showBubbles ? '지역 버블 — 확대하면 단지' : '단지 마커 — 축소하면 지역'}
+              {showBubbles ? '지역 버블 — 확대하면 단지' : '클러스터 라벨=거래 건수 합'}
             </div>
           )}
 

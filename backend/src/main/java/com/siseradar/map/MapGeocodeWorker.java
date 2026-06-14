@@ -53,27 +53,26 @@ public class MapGeocodeWorker {
   public void geocode(
       String lawdCd, PropertyType pt, String buildingName, String umdNm, String key) {
     try {
-      GeocodeStatus status = GeocodeStatus.FAILED;
-      Double lat = null;
-      Double lng = null;
-
       String query = (umdNm == null ? "" : umdNm + " ") + buildingName;
-      GeoPlace gp = kakao.geocodePlace(query);
-      if (gp != null && inExpectedSigungu(lawdCd, gp.addressName())) {
-        status = GeocodeStatus.SUCCESS;
-        lat = gp.lat();
-        lng = gp.lng();
-      }
-      repo.save(new ComplexGeocode(lawdCd, pt, buildingName, lat, lng, status));
+      GeoPlace gp = kakao.geocodePlace(query); // RestClientException on quota/network (transient)
+
+      // SUCCESS only if the geocoded address is actually in the expected 시군구. A genuine
+      // no-result or wrong-시군구 caches FAILED (don't retry forever); a transient error is
+      // thrown and handled below WITHOUT caching, so the building retries on a later request.
+      boolean ok = gp != null && inExpectedSigungu(lawdCd, gp.addressName());
+      repo.save(
+          new ComplexGeocode(
+              lawdCd,
+              pt,
+              buildingName,
+              ok ? gp.lat() : null,
+              ok ? gp.lng() : null,
+              ok ? GeocodeStatus.SUCCESS : GeocodeStatus.FAILED));
     } catch (DataIntegrityViolationException dup) {
       // another worker already cached it — fine
     } catch (RuntimeException e) {
-      log.warn("Geocode failed {} {} {}: {}", lawdCd, pt, buildingName, e.getMessage());
-      try {
-        repo.save(new ComplexGeocode(lawdCd, pt, buildingName, null, null, GeocodeStatus.FAILED));
-      } catch (RuntimeException ignored) {
-        /* row may already exist */
-      }
+      // transient (quota/network/unexpected) → leave un-cached so it retries later
+      log.warn("Geocode transient error {} {} {}: {} — will retry", lawdCd, pt, buildingName, e.getMessage());
     } finally {
       inFlight.remove(key);
     }

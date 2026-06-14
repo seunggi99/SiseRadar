@@ -47,29 +47,22 @@ public class RegionCentroidWorker {
   @Transactional
   public void geocode(String lawdCd) {
     try {
-      GeocodeStatus status = GeocodeStatus.FAILED;
-      Double lat = null;
-      Double lng = null;
-
       String name = koreaRegions.name(lawdCd);
-      if (name != null) {
-        LatLng ll = kakao.geocodeAddress(name);
-        if (ll != null) {
-          status = GeocodeStatus.SUCCESS;
-          lat = ll.lat();
-          lng = ll.lng();
-        }
-      }
-      repo.save(new RegionCentroid(lawdCd, lat, lng, status));
+      LatLng ll = name == null ? null : kakao.geocodeAddress(name); // transient → throws
+
+      // genuine no-result → FAILED; transient (quota/network) is thrown and left un-cached to retry
+      boolean ok = ll != null;
+      repo.save(
+          new RegionCentroid(
+              lawdCd,
+              ok ? ll.lat() : null,
+              ok ? ll.lng() : null,
+              ok ? GeocodeStatus.SUCCESS : GeocodeStatus.FAILED));
     } catch (DataIntegrityViolationException dup) {
       // already cached by another worker — fine
     } catch (RuntimeException e) {
-      log.warn("Region centroid geocode failed {}: {}", lawdCd, e.getMessage());
-      try {
-        repo.save(new RegionCentroid(lawdCd, null, null, GeocodeStatus.FAILED));
-      } catch (RuntimeException ignored) {
-        /* row may already exist */
-      }
+      // transient → leave un-cached so it retries on a later request
+      log.warn("Region centroid transient error {}: {} — will retry", lawdCd, e.getMessage());
     } finally {
       inFlight.remove(lawdCd);
     }

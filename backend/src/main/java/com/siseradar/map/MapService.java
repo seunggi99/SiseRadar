@@ -10,8 +10,6 @@ import com.siseradar.repository.MapComplexStatRow;
 import com.siseradar.repository.MapRegionStatRow;
 import com.siseradar.repository.RealEstateTransactionRepository;
 import com.siseradar.repository.RegionCentroidRepository;
-import java.time.YearMonth;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
@@ -29,9 +27,6 @@ import org.springframework.stereotype.Service;
 @Service
 public class MapService {
 
-  private static final DateTimeFormatter YM = DateTimeFormatter.ofPattern("yyyyMM");
-  /** Default window so the map isn't empty. */
-  private static final int DEFAULT_MONTHS = 12;
   /** Max new buildings to geocode per request (Kakao quota guard). */
   private static final int GEOCODE_CAP = 25;
   /** Max region centroids to geocode per /regions request (one-time, tiny). */
@@ -103,7 +98,11 @@ public class MapService {
     return out;
   }
 
-  /** Shared per-region marker assembly; {@code launched[0]} is the running geocode budget. */
+  /**
+   * Shared per-region marker assembly; {@code launched[0]} is the running geocode budget. Uses the
+   * period as given (null = 전체 기간) — the SAME scope as the region bubbles, so a cluster's 거래
+   * 건수 합 converges toward the region total as geocoding fills in.
+   */
   private void collectComplexes(
       String lawdCd,
       PropertyType pt,
@@ -113,14 +112,8 @@ public class MapService {
       String band,
       List<MapComplexResponse> out,
       int[] launched) {
-    String toYm = (to == null || to.isBlank()) ? trades.latestYmd(lawdCd, pt, tt) : to;
-    if (toYm == null) {
-      return;
-    }
-    String fromYm =
-        (from == null || from.isBlank())
-            ? YearMonth.parse(toYm, YM).minusMonths(DEFAULT_MONTHS).format(YM)
-            : from;
+    String fromYm = (from == null || from.isBlank()) ? null : from;
+    String toYm = (to == null || to.isBlank()) ? null : to;
     String bandFilter = (band == null || band.isBlank()) ? null : band;
 
     List<MapComplexStatRow> rows =
