@@ -4,6 +4,7 @@ import type {
   AuthResponse,
   ComplexChange,
   ComplexRank,
+  MapComplex,
   MonthlyStats,
   NotificationItem,
   PageResponse,
@@ -149,6 +150,21 @@ export const api = {
     add: (body: { watchlistId: number; condition: AlertCondition; threshold?: number }) =>
       request<AlertRule>('POST', '/api/alerts', { body }),
     remove: (id: number) => request<void>('DELETE', `/api/alerts/${id}`),
+  },
+
+  // ── map ──
+  map: {
+    complexes: (
+      lawdCd: string,
+      propertyType: PropertyType,
+      tradeType: TradeType,
+      from?: string,
+      to?: string,
+      band?: string,
+    ) =>
+      request<MapComplex[]>('GET', '/api/map/complexes', {
+        params: { lawdCd, propertyType, tradeType, from, to, band },
+      }),
   },
 
   // ── region on-demand collection ──

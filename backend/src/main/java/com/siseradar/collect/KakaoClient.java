@@ -3,6 +3,8 @@ package com.siseradar.collect;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.net.URI;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -58,9 +60,65 @@ public class KakaoClient {
     return new ResolvedRegion(lawdCd, doc.region1depthName, doc.region2depthName);
   }
 
+  public record LatLng(double lat, double lng) {}
+
+  /** Forward geocode (keyword search) → first result's coordinate, or null if none. */
+  public LatLng geocode(String query) {
+    if (props.restKey() == null || props.restKey().isBlank()) {
+      return null;
+    }
+    String url =
+        "https://dapi.kakao.com/v2/local/search/keyword.json?size=1&query="
+            + URLEncoder.encode(query, StandardCharsets.UTF_8);
+    KeywordResponse res;
+    try {
+      res =
+          restClient
+              .get()
+              .uri(URI.create(url))
+              .header("Authorization", "KakaoAK " + props.restKey())
+              .retrieve()
+              .body(KeywordResponse.class);
+    } catch (RuntimeException e) {
+      return null;
+    }
+    if (res == null || res.documents == null || res.documents.isEmpty()) {
+      return null;
+    }
+    Place p = res.documents.get(0);
+    try {
+      return new LatLng(Double.parseDouble(p.y), Double.parseDouble(p.x));
+    } catch (NumberFormatException e) {
+      return null;
+    }
+  }
+
+  /** Reverse-resolve a coordinate to its 시군구 code, or null (no throw) — used for validation. */
+  public String lawdCdAt(double lng, double lat) {
+    try {
+      return coord2region(lng, lat).lawdCd();
+    } catch (RuntimeException e) {
+      return null;
+    }
+  }
+
   @JsonIgnoreProperties(ignoreUnknown = true)
   static class Coord2RegionResponse {
     public List<Doc> documents;
+  }
+
+  @JsonIgnoreProperties(ignoreUnknown = true)
+  static class KeywordResponse {
+    public List<Place> documents;
+  }
+
+  @JsonIgnoreProperties(ignoreUnknown = true)
+  static class Place {
+    @JsonProperty("x")
+    public String x; // lng
+
+    @JsonProperty("y")
+    public String y; // lat
   }
 
   @JsonIgnoreProperties(ignoreUnknown = true)

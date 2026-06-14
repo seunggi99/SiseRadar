@@ -161,6 +161,39 @@ public interface RealEstateTransactionRepository extends JpaRepository<RealEstat
       @Param("fromYm") String fromYm,
       @Param("toYm") String toYm);
 
+  /**
+   * Per-building stats for the map over a period (전용 단위면적가 만원/㎡), optional 평형대 필터.
+   * building_name 있는 단지만. umdNm(대표 동)은 지오코딩 질의에 사용.
+   */
+  @Query(
+      value =
+          """
+          SELECT t.building_name AS buildingName,
+                 MAX(t.umd_nm) AS umdNm,
+                 COUNT(*) AS cnt,
+                 AVG(COALESCE(t.deal_amount, t.deposit) / NULLIF(t.area, 0)) AS avgPricePerArea,
+                 PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY COALESCE(t.deal_amount, t.deposit) / NULLIF(t.area, 0)) AS medianPricePerArea
+          FROM real_estate_transaction t
+          WHERE t.lawd_cd = :lawdCd AND t.property_type = :pt AND t.trade_type = :tt
+            AND t.building_name IS NOT NULL
+            AND (:from IS NULL OR t.deal_ymd >= :from)
+            AND (:to IS NULL OR t.deal_ymd <= :to)
+            AND (:band IS NULL OR
+                 CASE WHEN t.area <= 60 THEN 'SMALL'
+                      WHEN t.area <= 85 THEN 'MID_SMALL'
+                      WHEN t.area <= 135 THEN 'MID_LARGE'
+                      ELSE 'LARGE' END = :band)
+          GROUP BY t.building_name
+          """,
+      nativeQuery = true)
+  List<MapComplexStatRow> mapComplexStats(
+      @Param("lawdCd") String lawdCd,
+      @Param("pt") String propertyType,
+      @Param("tt") String tradeType,
+      @Param("from") String from,
+      @Param("to") String to,
+      @Param("band") String band);
+
   @Query(
       "SELECT MAX(t.dealYmd) FROM RealEstateTransaction t "
           + "WHERE t.lawdCd = :lawdCd AND t.propertyType = :pt AND t.tradeType = :tt")

@@ -52,6 +52,23 @@ export function useComplexTrades(
   });
 }
 
+// ── map ──
+export function useMapComplexes(
+  lawdCd: string,
+  propertyType: PropertyType,
+  tradeType: TradeType,
+  from: string | undefined,
+  to: string | undefined,
+  band: string | undefined,
+) {
+  return useQuery({
+    queryKey: ['mapComplexes', lawdCd, propertyType, tradeType, from, to, band],
+    queryFn: () => api.map.complexes(lawdCd, propertyType, tradeType, from, to, band),
+    // poll while background geocoding fills markers in
+    refetchInterval: 6000,
+  });
+}
+
 // ── region on-demand collection ──
 export function useRegionStatus(lawdCd: string, enabled: boolean) {
   return useQuery({

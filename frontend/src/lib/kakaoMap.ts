@@ -21,7 +21,7 @@ export function loadKakao(): Promise<any> {
     }
     const s = document.createElement('script');
     s.id = 'kakao-sdk';
-    s.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${KAKAO_KEY}&autoload=false`;
+    s.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${KAKAO_KEY}&autoload=false&libraries=clusterer`;
     s.onload = finish;
     s.onerror = reject;
     document.head.appendChild(s);

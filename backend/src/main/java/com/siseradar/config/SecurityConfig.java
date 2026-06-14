@@ -37,7 +37,7 @@ public class SecurityConfig {
                     // public read + auth + docs
                     .requestMatchers("/api/auth/**", "/api/health", "/error")
                     .permitAll()
-                    .requestMatchers(HttpMethod.GET, "/api/trades/**", "/api/stats/**")
+                    .requestMatchers(HttpMethod.GET, "/api/trades/**", "/api/stats/**", "/api/map/**")
                     .permitAll()
                     // region status + on-demand collect are public (dashboard has no login)
                     .requestMatchers("/api/regions/**")

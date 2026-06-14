@@ -74,6 +74,16 @@ export interface ComplexRank {
   avgMonthlyRent: number | null;
 }
 
+export interface MapComplex {
+  buildingName: string;
+  lat: number;
+  lng: number;
+  /** 단위면적가 만원/㎡ (전용 기준). 평당 = ×3.3058. */
+  avgPricePerArea: number;
+  medianPricePerArea: number;
+  count: number;
+}
+
 export interface ComplexChange {
   fromYm: string | null;
   toYm: string | null;
