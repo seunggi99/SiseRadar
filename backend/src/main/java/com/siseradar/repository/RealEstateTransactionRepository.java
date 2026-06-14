@@ -71,6 +71,40 @@ public interface RealEstateTransactionRepository extends JpaRepository<RealEstat
       @Param("from") String from,
       @Param("to") String to);
 
+  /**
+   * Per-month, per-area-band breakdown (전용면적 기준 구간). Bands: ≤60 / 60–85 / 85–135 / >135.
+   * Rows with null area land in LARGE (rare; residential types always have area).
+   */
+  @Query(
+      value =
+          """
+          SELECT t.deal_ymd AS ym,
+                 CASE WHEN t.area <= 60 THEN 'SMALL'
+                      WHEN t.area <= 85 THEN 'MID_SMALL'
+                      WHEN t.area <= 135 THEN 'MID_LARGE'
+                      ELSE 'LARGE' END AS band,
+                 COUNT(*) AS cnt,
+                 AVG(COALESCE(t.deal_amount, t.deposit) / NULLIF(t.area, 0)) AS avgPricePerArea,
+                 PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY COALESCE(t.deal_amount, t.deposit) / NULLIF(t.area, 0)) AS medianPricePerArea
+          FROM real_estate_transaction t
+          WHERE t.lawd_cd = :lawdCd AND t.property_type = :pt AND t.trade_type = :tt
+            AND (:from IS NULL OR t.deal_ymd >= :from)
+            AND (:to IS NULL OR t.deal_ymd <= :to)
+          GROUP BY t.deal_ymd,
+                 CASE WHEN t.area <= 60 THEN 'SMALL'
+                      WHEN t.area <= 85 THEN 'MID_SMALL'
+                      WHEN t.area <= 135 THEN 'MID_LARGE'
+                      ELSE 'LARGE' END
+          ORDER BY t.deal_ymd
+          """,
+      nativeQuery = true)
+  List<BandStatRow> monthlyStatsByBand(
+      @Param("lawdCd") String lawdCd,
+      @Param("pt") String propertyType,
+      @Param("tt") String tradeType,
+      @Param("from") String from,
+      @Param("to") String to);
+
   @Query(
       value =
           """

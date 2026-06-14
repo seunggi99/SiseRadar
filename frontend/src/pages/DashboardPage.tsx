@@ -9,6 +9,7 @@ import {
   useRegionStatus,
 } from '../api/hooks';
 import type { PropertyType, TradeType } from '../api/types';
+import { AreaBandBreakdown } from '../components/AreaBandBreakdown';
 import { ComplexDetailModal } from '../components/ComplexDetailModal';
 import { ComplexRankingTable } from '../components/ComplexRankingTable';
 import { Header } from '../components/Header';
@@ -194,6 +195,17 @@ export function DashboardPage() {
               </div>
               <TrendChart data={stats} amountLabel={amountLabel(tradeType)} />
             </section>
+
+            {/* area-band breakdown (latest month, 전용 기준) */}
+            {latest.bands.length > 0 && (
+              <section className="flex flex-col gap-3">
+                <h2 className="text-base font-medium">
+                  평형대별
+                  <span className="sr-muted ml-2 text-sm">{formatYmLong(latest.ym)} · 전용 기준</span>
+                </h2>
+                <AreaBandBreakdown bands={latest.bands} />
+              </section>
+            )}
 
             {/* ranking table — only for building-level types (단독/토지/상업/산업 제외) */}
             {meta.hasRanking && (

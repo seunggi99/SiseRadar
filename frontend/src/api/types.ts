@@ -24,6 +24,16 @@ export interface MonthlyStats {
   avgMonthlyRent: number | null;
   /** 전월 대비 중위 단위면적가 변화율 (%). */
   momChangePct: number | null;
+  /** 전용면적 평형대별 분해. */
+  bands: AreaBand[];
+}
+
+export type AreaBandKey = 'SMALL' | 'MID_SMALL' | 'MID_LARGE' | 'LARGE';
+export interface AreaBand {
+  band: AreaBandKey;
+  count: number;
+  avgPricePerArea: number;
+  medianPricePerArea: number;
 }
 
 export interface Trade {
