@@ -121,7 +121,8 @@ public class TradeCollectionService {
       TradeType tradeType,
       RtmsApiResponse.Item item) {
     try {
-      BigDecimal area = item.excluUseAr == null ? null : new BigDecimal(item.excluUseAr.trim());
+      String areaRaw = areaFieldFor(propertyType, item);
+      BigDecimal area = areaRaw == null || areaRaw.isBlank() ? null : new BigDecimal(areaRaw.trim());
       Integer floor = parseNullableInt(item.floor);
       Integer buildYear = parseNullableInt(item.buildYear);
       LocalDate dealDate =
@@ -129,7 +130,7 @@ public class TradeCollectionService {
               Integer.parseInt(item.dealYear.trim()),
               Integer.parseInt(item.dealMonth.trim()),
               Integer.parseInt(item.dealDay.trim()));
-      String buildingName = item.aptNm == null ? null : item.aptNm.trim();
+      String buildingName = trimOrNull(buildingNameFor(propertyType, item));
       String umdNm = item.umdNm == null ? null : item.umdNm.trim();
       String jibun = item.jibun == null ? null : item.jibun.trim();
 
@@ -153,6 +154,30 @@ public class TradeCollectionService {
           lawdCd, dealYmd, propertyType, tradeType, e.getMessage());
       return null;
     }
+  }
+
+  /** Building-name field varies by type; null for types without a building (단독/상업/토지/산업). */
+  private static String buildingNameFor(PropertyType pt, RtmsApiResponse.Item item) {
+    return switch (pt) {
+      case APT, PRESALE_RIGHT -> item.aptNm;
+      case OFFICETEL -> item.offiNm;
+      case ROW_HOUSE -> item.mhouseNm;
+      case DETACHED, COMMERCIAL, LAND, INDUSTRIAL -> null;
+    };
+  }
+
+  /** Area field varies by type: 전용면적/연면적/건물면적/거래면적. */
+  private static String areaFieldFor(PropertyType pt, RtmsApiResponse.Item item) {
+    return switch (pt) {
+      case APT, OFFICETEL, ROW_HOUSE, PRESALE_RIGHT -> item.excluUseAr;
+      case DETACHED -> item.totalFloorAr;
+      case COMMERCIAL, INDUSTRIAL -> item.buildingAr;
+      case LAND -> item.dealArea;
+    };
+  }
+
+  private static String trimOrNull(String s) {
+    return s == null || s.isBlank() ? null : s.trim();
   }
 
   /** Strips commas, parses 만원 → Long; null/blank → null. */

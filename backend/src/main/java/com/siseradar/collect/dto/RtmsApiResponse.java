@@ -47,9 +47,15 @@ public class RtmsApiResponse {
 
   @JsonIgnoreProperties(ignoreUnknown = true)
   public static class Item {
-    /** 단지/건물명 (APT). 다른 유형은 추가 시 별도 필드 매핑 필요. */
+    /** 건물명 — 유형별로 필드가 다름: 아파트/분양권 aptNm, 오피스텔 offiNm, 연립다세대 mhouseNm. */
     @JacksonXmlProperty(localName = "aptNm")
     public String aptNm;
+
+    @JacksonXmlProperty(localName = "offiNm")
+    public String offiNm;
+
+    @JacksonXmlProperty(localName = "mhouseNm")
+    public String mhouseNm;
 
     @JacksonXmlProperty(localName = "umdNm")
     public String umdNm;
@@ -57,8 +63,21 @@ public class RtmsApiResponse {
     @JacksonXmlProperty(localName = "jibun")
     public String jibun;
 
+    /** 전용면적 ㎡ (아파트·오피스텔·연립·분양권). */
     @JacksonXmlProperty(localName = "excluUseAr")
     public String excluUseAr;
+
+    /** 연면적 ㎡ (단독·다가구). */
+    @JacksonXmlProperty(localName = "totalFloorAr")
+    public String totalFloorAr;
+
+    /** 건물면적 ㎡ (상업업무용·산업용). */
+    @JacksonXmlProperty(localName = "buildingAr")
+    public String buildingAr;
+
+    /** 거래면적 ㎡ (토지). */
+    @JacksonXmlProperty(localName = "dealArea")
+    public String dealArea;
 
     @JacksonXmlProperty(localName = "floor")
     public String floor;

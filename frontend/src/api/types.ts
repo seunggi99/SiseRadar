@@ -7,6 +7,7 @@ export type PropertyType =
   | 'DETACHED'
   | 'LAND'
   | 'COMMERCIAL'
+  | 'INDUSTRIAL'
   | 'PRESALE_RIGHT';
 export type TradeType = 'SALE' | 'RENT';
 

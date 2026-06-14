@@ -8,5 +8,6 @@ public enum PropertyType {
   DETACHED, // 단독/다가구
   LAND, // 토지
   COMMERCIAL, // 상업업무용
-  PRESALE_RIGHT // 분양권 전매
+  INDUSTRIAL, // 공장·창고 등 산업용
+  PRESALE_RIGHT // 분양권/입주권 전매
 }

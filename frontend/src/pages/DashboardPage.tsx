@@ -20,7 +20,7 @@ import { EmptyState, ErrorState, LoadingState } from '../components/StateViews';
 import { TrendChart } from '../components/TrendChart';
 import { useAuth } from '../lib/auth';
 import { directionColor } from '../lib/colors';
-import { amountLabel } from '../lib/propertyTypes';
+import { amountLabel, propertyMeta } from '../lib/propertyTypes';
 import { useToast } from '../lib/toast';
 import {
   formatCount,
@@ -41,6 +41,13 @@ export function DashboardPage() {
   const monthly = useMonthlyStats(lawdCd, propertyType, tradeType);
   const ranking = useComplexRanking(lawdCd, propertyType, tradeType);
   const isRent = tradeType === 'RENT';
+  const meta = propertyMeta(propertyType);
+
+  // switching to a sale-only type (토지/상업/산업/분양권) drops RENT back to SALE
+  function changeProperty(pt: PropertyType) {
+    setPropertyType(pt);
+    if (!propertyMeta(pt).rentAvailable) setTradeType('SALE');
+  }
 
   // on-demand collection: regions with no data trigger a background 24-month backfill
   const stats = monthly.data ?? [];
@@ -131,7 +138,7 @@ export function DashboardPage() {
           <PropertyTradeSelector
             propertyType={propertyType}
             tradeType={tradeType}
-            onPropertyChange={setPropertyType}
+            onPropertyChange={changeProperty}
             onTradeChange={setTradeType}
           />
         </div>
@@ -191,31 +198,33 @@ export function DashboardPage() {
               <TrendChart data={stats} amountLabel={amountLabel(tradeType)} />
             </section>
 
-            {/* ranking table */}
-            <section className="flex flex-col gap-3">
-              <h2 className="text-base font-medium">
-                단지 랭킹
-                {latest && <span className="sr-muted ml-2 text-sm">{formatYmLong(latest.ym)}</span>}
-              </h2>
-              {ranking.isLoading ? (
-                <LoadingState message="단지 랭킹을 집계하는 중…" />
-              ) : ranking.isError ? (
-                <ErrorState onRetry={() => ranking.refetch()} />
-              ) : (
-                <ComplexRankingTable
-                  rows={ranking.data ?? []}
-                  amountLabel={amountLabel(tradeType)}
-                  showMonthlyRent={isRent}
-                  onAddComplex={addComplex}
-                  onSelectComplex={setSelectedComplex}
-                />
-              )}
-            </section>
+            {/* ranking table — only for building-level types (단독/토지/상업/산업 제외) */}
+            {meta.hasRanking && (
+              <section className="flex flex-col gap-3">
+                <h2 className="text-base font-medium">
+                  단지 랭킹
+                  {latest && <span className="sr-muted ml-2 text-sm">{formatYmLong(latest.ym)}</span>}
+                </h2>
+                {ranking.isLoading ? (
+                  <LoadingState message="단지 랭킹을 집계하는 중…" />
+                ) : ranking.isError ? (
+                  <ErrorState onRetry={() => ranking.refetch()} />
+                ) : (
+                  <ComplexRankingTable
+                    rows={ranking.data ?? []}
+                    amountLabel={amountLabel(tradeType)}
+                    showMonthlyRent={isRent}
+                    onAddComplex={addComplex}
+                    onSelectComplex={setSelectedComplex}
+                  />
+                )}
+              </section>
+            )}
           </div>
         ) : null}
 
         <footer className="sr-muted mt-10 text-center text-xs">
-          데이터 · 국토교통부 아파트 매매·전월세 실거래가 (data.go.kr)
+          데이터 · 국토교통부 부동산 실거래가 (data.go.kr)
         </footer>
       </main>
 
