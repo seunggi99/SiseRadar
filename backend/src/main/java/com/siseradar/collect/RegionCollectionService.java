@@ -1,6 +1,8 @@
 package com.siseradar.collect;
 
-import com.siseradar.repository.AptTradeRepository;
+import com.siseradar.domain.PropertyType;
+import com.siseradar.domain.TradeType;
+import com.siseradar.repository.RealEstateTransactionRepository;
 import org.springframework.stereotype.Service;
 
 /** Decides whether a region needs on-demand collection and reports its status. */
@@ -10,10 +12,11 @@ public class RegionCollectionService {
   /** How many months to backfill the first time a region is opened. */
   private static final int BACKFILL_MONTHS = 24;
 
-  private final AptTradeRepository trades;
+  private final RealEstateTransactionRepository trades;
   private final RegionCollectionWorker worker;
 
-  public RegionCollectionService(AptTradeRepository trades, RegionCollectionWorker worker) {
+  public RegionCollectionService(
+      RealEstateTransactionRepository trades, RegionCollectionWorker worker) {
     this.trades = trades;
     this.worker = worker;
   }
@@ -27,7 +30,8 @@ public class RegionCollectionService {
   public record Status(State state, long months) {}
 
   public Status status(String lawdCd) {
-    long months = trades.countMonths(lawdCd);
+    // "Has data" is judged by the default dashboard view (아파트 매매).
+    long months = trades.countMonths(lawdCd, PropertyType.APT, TradeType.SALE);
     if (months > 0) {
       return new Status(State.DONE, months);
     }

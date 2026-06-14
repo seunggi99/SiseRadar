@@ -1,7 +1,8 @@
 package com.siseradar.web.dto;
 
 /**
- * One complex's ranking row for a region+month. Amounts are 만원; {@code avgPricePerPyeong} is 만원/평.
+ * One building's ranking row. {@code aptName} is the building name (kept as "aptName" for frontend
+ * back-compat). Amounts are the primary amount (만원); {@code avgMonthlyRent} is null for SALE.
  */
 public record ComplexRankResponse(
     int rank,
@@ -9,4 +10,5 @@ public record ComplexRankResponse(
     long count,
     long avgAmount,
     long maxAmount,
-    long avgPricePerPyeong) {}
+    long avgPricePerPyeong,
+    Long avgMonthlyRent) {}

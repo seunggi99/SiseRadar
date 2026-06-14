@@ -1,13 +1,15 @@
 package com.siseradar.alert;
 
 import com.siseradar.domain.AlertRule;
-import com.siseradar.domain.AptTrade;
 import com.siseradar.domain.Notification;
+import com.siseradar.domain.PropertyType;
+import com.siseradar.domain.RealEstateTransaction;
+import com.siseradar.domain.TradeType;
 import com.siseradar.domain.WatchType;
 import com.siseradar.domain.Watchlist;
 import com.siseradar.repository.AlertRuleRepository;
-import com.siseradar.repository.AptTradeRepository;
 import com.siseradar.repository.NotificationRepository;
+import com.siseradar.repository.RealEstateTransactionRepository;
 import com.siseradar.repository.WatchlistRepository;
 import java.time.Instant;
 import java.time.YearMonth;
@@ -18,9 +20,10 @@ import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 
 /**
- * After a collection run inserts new trades for a region+month, raises in-app notifications for
- * users watching that region/complex whose alert rules fire. Only runs when there were new
- * inserts, so re-collecting an unchanged month doesn't re-notify.
+ * After a collection run inserts new transactions for a region+month+type, raises in-app
+ * notifications for users watching that region/complex whose alert rules fire. Only runs when there
+ * were new inserts, so re-collecting an unchanged month doesn't re-notify. Price-change uses the
+ * primary amount (매매 거래가 / 전월세 보증금) scoped to the collected type.
  */
 @Service
 public class AlertEvaluationService {
@@ -30,20 +33,25 @@ public class AlertEvaluationService {
   private final WatchlistRepository watchlists;
   private final AlertRuleRepository alertRules;
   private final NotificationRepository notifications;
-  private final AptTradeRepository trades;
+  private final RealEstateTransactionRepository trades;
 
   public AlertEvaluationService(
       WatchlistRepository watchlists,
       AlertRuleRepository alertRules,
       NotificationRepository notifications,
-      AptTradeRepository trades) {
+      RealEstateTransactionRepository trades) {
     this.watchlists = watchlists;
     this.alertRules = alertRules;
     this.notifications = notifications;
     this.trades = trades;
   }
 
-  public void evaluate(String lawdCd, String ym, List<AptTrade> inserted) {
+  public void evaluate(
+      String lawdCd,
+      String ym,
+      PropertyType propertyType,
+      TradeType tradeType,
+      List<RealEstateTransaction> inserted) {
     if (inserted.isEmpty()) {
       return;
     }
@@ -62,7 +70,8 @@ public class AlertEvaluationService {
       String message =
           switch (rule.getCondition()) {
             case NEW_TRADE -> newTradeMessage(w, inserted);
-            case PRICE_CHANGE_PCT -> priceChangeMessage(w, ym, rule.getThreshold());
+            case PRICE_CHANGE_PCT ->
+                priceChangeMessage(w, ym, propertyType, tradeType, rule.getThreshold());
           };
       if (message != null) {
         notifications.save(new Notification(rule.getUserId(), message, Instant.now()));
@@ -70,15 +79,17 @@ public class AlertEvaluationService {
     }
   }
 
-  private String newTradeMessage(Watchlist w, List<AptTrade> inserted) {
+  private String newTradeMessage(Watchlist w, List<RealEstateTransaction> inserted) {
     if (w.getType() == WatchType.REGION) {
       return "[%s] 새 거래 %d건이 포착됐어요.".formatted(w.getLawdCd(), inserted.size());
     }
-    long count = inserted.stream().filter(t -> t.getAptName().equals(w.getAptName())).count();
+    long count =
+        inserted.stream().filter(t -> w.getAptName().equals(t.getBuildingName())).count();
     return count > 0 ? "[%s] 새 거래 %d건이 포착됐어요.".formatted(w.getAptName(), count) : null;
   }
 
-  private String priceChangeMessage(Watchlist w, String ym, Double threshold) {
+  private String priceChangeMessage(
+      Watchlist w, String ym, PropertyType pt, TradeType tt, Double threshold) {
     if (threshold == null) {
       return null;
     }
@@ -87,12 +98,12 @@ public class AlertEvaluationService {
     Double prev;
     String label;
     if (w.getType() == WatchType.REGION) {
-      cur = trades.avgAmountByRegionAndYm(w.getLawdCd(), ym);
-      prev = trades.avgAmountByRegionAndYm(w.getLawdCd(), prevYm);
+      cur = trades.avgPrimaryByRegionAndYm(w.getLawdCd(), pt, tt, ym);
+      prev = trades.avgPrimaryByRegionAndYm(w.getLawdCd(), pt, tt, prevYm);
       label = w.getLawdCd();
     } else {
-      cur = trades.avgAmountByComplexAndYm(w.getLawdCd(), w.getAptName(), ym);
-      prev = trades.avgAmountByComplexAndYm(w.getLawdCd(), w.getAptName(), prevYm);
+      cur = trades.avgPrimaryByComplexAndYm(w.getLawdCd(), pt, tt, w.getAptName(), ym);
+      prev = trades.avgPrimaryByComplexAndYm(w.getLawdCd(), pt, tt, w.getAptName(), prevYm);
       label = w.getAptName();
     }
     if (cur == null || prev == null || prev == 0) {

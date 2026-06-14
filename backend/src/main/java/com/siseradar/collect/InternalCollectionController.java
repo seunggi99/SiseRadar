@@ -2,6 +2,7 @@ package com.siseradar.collect;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import java.util.ArrayList;
 import java.util.List;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -24,13 +25,19 @@ public class InternalCollectionController {
   }
 
   @PostMapping("/collect")
-  @Operation(summary = "한 지역의 한 달(또는 최근 N개월) 거래를 수집한다")
+  @Operation(summary = "한 지역의 한 달(또는 최근 N개월) × 활성 유형 거래를 수집한다")
   public List<TradeCollectionService.Result> collect(
       @RequestParam String lawdCd,
       @RequestParam(required = false) String dealYmd,
       @RequestParam(required = false, defaultValue = "1") int recentMonths) {
     List<String> months =
         dealYmd != null ? List.of(dealYmd) : CollectionScheduler.recentMonths(recentMonths);
-    return months.stream().map(ym -> collectionService.collect(lawdCd, ym)).toList();
+    List<TradeCollectionService.Result> results = new ArrayList<>();
+    for (String ym : months) {
+      for (RtmsOperations.TypePair pair : RtmsOperations.ENABLED) {
+        results.add(collectionService.collect(lawdCd, ym, pair.propertyType(), pair.tradeType()));
+      }
+    }
+    return results;
   }
 }

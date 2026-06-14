@@ -1,0 +1,130 @@
+package com.siseradar.repository;
+
+import com.siseradar.domain.PropertyType;
+import com.siseradar.domain.RealEstateTransaction;
+import com.siseradar.domain.TradeType;
+import java.math.BigDecimal;
+import java.util.List;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+
+/**
+ * Aggregations are scoped by (propertyType, tradeType) so SALE 거래가 and RENT 보증금 never mix.
+ * The "primary amount" is {@code COALESCE(deal_amount, deposit)} — deal_amount for SALE,
+ * deposit for RENT. Native queries take the enum {@code name()} as a String.
+ */
+public interface RealEstateTransactionRepository extends JpaRepository<RealEstateTransaction, Long> {
+
+  /** Existing rows for one region+month+type — used to build the idempotency key set. */
+  List<RealEstateTransaction> findByLawdCdAndDealYmdAndPropertyTypeAndTradeType(
+      String lawdCd, String dealYmd, PropertyType propertyType, TradeType tradeType);
+
+  @Query(
+      """
+      SELECT t FROM RealEstateTransaction t
+      WHERE t.lawdCd = :lawdCd
+        AND t.propertyType = :propertyType
+        AND t.tradeType = :tradeType
+        AND (:buildingName IS NULL OR t.buildingName = :buildingName)
+        AND (:from IS NULL OR t.dealYmd >= :from)
+        AND (:to IS NULL OR t.dealYmd <= :to)
+        AND (:areaMin IS NULL OR t.area >= :areaMin)
+        AND (:areaMax IS NULL OR t.area <= :areaMax)
+      ORDER BY t.dealDate DESC, t.id DESC
+      """)
+  Page<RealEstateTransaction> search(
+      @Param("lawdCd") String lawdCd,
+      @Param("propertyType") PropertyType propertyType,
+      @Param("tradeType") TradeType tradeType,
+      @Param("buildingName") String buildingName,
+      @Param("from") String from,
+      @Param("to") String to,
+      @Param("areaMin") BigDecimal areaMin,
+      @Param("areaMax") BigDecimal areaMax,
+      Pageable pageable);
+
+  @Query(
+      value =
+          """
+          SELECT t.deal_ymd AS ym,
+                 COUNT(*) AS cnt,
+                 AVG(COALESCE(t.deal_amount, t.deposit)) AS avgAmount,
+                 PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY COALESCE(t.deal_amount, t.deposit)) AS medianAmount,
+                 AVG(COALESCE(t.deal_amount, t.deposit) / (t.area / 3.305785)) AS avgPricePerPyeong,
+                 AVG(t.monthly_rent) AS avgMonthlyRent
+          FROM real_estate_transaction t
+          WHERE t.lawd_cd = :lawdCd AND t.property_type = :pt AND t.trade_type = :tt
+            AND (:from IS NULL OR t.deal_ymd >= :from)
+            AND (:to IS NULL OR t.deal_ymd <= :to)
+          GROUP BY t.deal_ymd
+          ORDER BY t.deal_ymd
+          """,
+      nativeQuery = true)
+  List<MonthlyStatRow> monthlyStats(
+      @Param("lawdCd") String lawdCd,
+      @Param("pt") String propertyType,
+      @Param("tt") String tradeType,
+      @Param("from") String from,
+      @Param("to") String to);
+
+  @Query(
+      value =
+          """
+          SELECT t.building_name AS buildingName,
+                 COUNT(*) AS cnt,
+                 AVG(COALESCE(t.deal_amount, t.deposit)) AS avgAmount,
+                 MAX(COALESCE(t.deal_amount, t.deposit)) AS maxAmount,
+                 AVG(COALESCE(t.deal_amount, t.deposit) / (t.area / 3.305785)) AS avgPricePerPyeong,
+                 AVG(t.monthly_rent) AS avgMonthlyRent
+          FROM real_estate_transaction t
+          WHERE t.lawd_cd = :lawdCd AND t.property_type = :pt AND t.trade_type = :tt AND t.deal_ymd = :ym
+          GROUP BY t.building_name
+          ORDER BY avgAmount DESC
+          """,
+      nativeQuery = true)
+  List<ComplexRankRow> complexRanking(
+      @Param("lawdCd") String lawdCd,
+      @Param("pt") String propertyType,
+      @Param("tt") String tradeType,
+      @Param("ym") String ym);
+
+  @Query(
+      "SELECT MAX(t.dealYmd) FROM RealEstateTransaction t "
+          + "WHERE t.lawdCd = :lawdCd AND t.propertyType = :pt AND t.tradeType = :tt")
+  String latestYmd(
+      @Param("lawdCd") String lawdCd,
+      @Param("pt") PropertyType propertyType,
+      @Param("tt") TradeType tradeType);
+
+  @Query(
+      "SELECT COUNT(DISTINCT t.dealYmd) FROM RealEstateTransaction t "
+          + "WHERE t.lawdCd = :lawdCd AND t.propertyType = :pt AND t.tradeType = :tt")
+  long countMonths(
+      @Param("lawdCd") String lawdCd,
+      @Param("pt") PropertyType propertyType,
+      @Param("tt") TradeType tradeType);
+
+  /** Average primary amount (만원) for a region+month+type — for alert evaluation. */
+  @Query(
+      "SELECT AVG(COALESCE(t.dealAmount, t.deposit)) FROM RealEstateTransaction t "
+          + "WHERE t.lawdCd = :lawdCd AND t.propertyType = :pt AND t.tradeType = :tt AND t.dealYmd = :ym")
+  Double avgPrimaryByRegionAndYm(
+      @Param("lawdCd") String lawdCd,
+      @Param("pt") PropertyType propertyType,
+      @Param("tt") TradeType tradeType,
+      @Param("ym") String ym);
+
+  @Query(
+      "SELECT AVG(COALESCE(t.dealAmount, t.deposit)) FROM RealEstateTransaction t "
+          + "WHERE t.lawdCd = :lawdCd AND t.propertyType = :pt AND t.tradeType = :tt "
+          + "AND t.buildingName = :buildingName AND t.dealYmd = :ym")
+  Double avgPrimaryByComplexAndYm(
+      @Param("lawdCd") String lawdCd,
+      @Param("pt") PropertyType propertyType,
+      @Param("tt") TradeType tradeType,
+      @Param("buildingName") String buildingName,
+      @Param("ym") String ym);
+}

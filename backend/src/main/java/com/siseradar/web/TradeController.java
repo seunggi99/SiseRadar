@@ -1,6 +1,8 @@
 package com.siseradar.web;
 
-import com.siseradar.repository.AptTradeRepository;
+import com.siseradar.domain.PropertyType;
+import com.siseradar.domain.TradeType;
+import com.siseradar.repository.RealEstateTransactionRepository;
 import com.siseradar.web.dto.PageResponse;
 import com.siseradar.web.dto.TradeResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -20,16 +22,18 @@ public class TradeController {
 
   private static final int MAX_SIZE = 200;
 
-  private final AptTradeRepository repository;
+  private final RealEstateTransactionRepository repository;
 
-  public TradeController(AptTradeRepository repository) {
+  public TradeController(RealEstateTransactionRepository repository) {
     this.repository = repository;
   }
 
   @GetMapping
-  @Operation(summary = "지역/기간/면적 필터로 실거래를 페이지 조회한다")
+  @Operation(summary = "지역/유형/기간/면적 필터로 실거래를 페이지 조회한다")
   public PageResponse<TradeResponse> trades(
       @RequestParam String lawdCd,
+      @RequestParam(required = false, defaultValue = "APT") PropertyType propertyType,
+      @RequestParam(required = false, defaultValue = "SALE") TradeType tradeType,
       @RequestParam(required = false) String aptName,
       @RequestParam(required = false) String from,
       @RequestParam(required = false) String to,
@@ -41,7 +45,7 @@ public class TradeController {
     Page<TradeResponse> result =
         repository
             .search(
-                lawdCd, aptName, from, to, areaMin, areaMax,
+                lawdCd, propertyType, tradeType, aptName, from, to, areaMin, areaMax,
                 PageRequest.of(Math.max(page, 0), safeSize))
             .map(TradeResponse::from);
     return PageResponse.of(result);

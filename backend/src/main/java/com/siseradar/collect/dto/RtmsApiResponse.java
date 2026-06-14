@@ -7,12 +7,12 @@ import com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlRootElement;
 import java.util.List;
 
 /**
- * Maps the data.go.kr {@code getRTMSDataSvcAptTrade} XML response. Field names mirror the
- * <b>actual</b> API payload (verified live), not the Korean labels in the spec.
+ * Maps the data.go.kr RTMS XML responses. Superset of fields across operations (all optional);
+ * APT 매매 uses {@code dealAmount}, APT 전월세 uses {@code deposit}+{@code monthlyRent}. Verified live.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JacksonXmlRootElement(localName = "response")
-public class AptTradeApiResponse {
+public class RtmsApiResponse {
 
   @JacksonXmlProperty(localName = "header")
   public Header header;
@@ -34,12 +34,6 @@ public class AptTradeApiResponse {
     @JacksonXmlProperty(localName = "items")
     public Items items;
 
-    @JacksonXmlProperty(localName = "numOfRows")
-    public int numOfRows;
-
-    @JacksonXmlProperty(localName = "pageNo")
-    public int pageNo;
-
     @JacksonXmlProperty(localName = "totalCount")
     public int totalCount;
   }
@@ -53,6 +47,7 @@ public class AptTradeApiResponse {
 
   @JsonIgnoreProperties(ignoreUnknown = true)
   public static class Item {
+    /** 단지/건물명 (APT). 다른 유형은 추가 시 별도 필드 매핑 필요. */
     @JacksonXmlProperty(localName = "aptNm")
     public String aptNm;
 
@@ -71,9 +66,17 @@ public class AptTradeApiResponse {
     @JacksonXmlProperty(localName = "buildYear")
     public String buildYear;
 
-    /** 거래금액, 만원, 콤마 포함 (e.g. "186,000"). */
+    /** 매매 거래금액 (만원, 콤마 포함). */
     @JacksonXmlProperty(localName = "dealAmount")
     public String dealAmount;
+
+    /** 전월세 보증금 (만원, 콤마 포함). */
+    @JacksonXmlProperty(localName = "deposit")
+    public String deposit;
+
+    /** 전월세 월세 (만원, 0=전세). */
+    @JacksonXmlProperty(localName = "monthlyRent")
+    public String monthlyRent;
 
     @JacksonXmlProperty(localName = "dealYear")
     public String dealYear;

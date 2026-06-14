@@ -34,10 +34,14 @@ public class CollectionScheduler {
     log.info("Scheduled collection start: regions={} months={}", props.lawdCodes(), months);
     for (String lawdCd : props.lawdCodes()) {
       for (String ym : months) {
-        try {
-          collectionService.collect(lawdCd, ym);
-        } catch (RuntimeException e) {
-          log.error("Collection failed for {} {}: {}", lawdCd, ym, e.getMessage());
+        for (RtmsOperations.TypePair pair : RtmsOperations.ENABLED) {
+          try {
+            collectionService.collect(lawdCd, ym, pair.propertyType(), pair.tradeType());
+          } catch (RuntimeException e) {
+            log.error(
+                "Collection failed for {} {} {}/{}: {}",
+                lawdCd, ym, pair.propertyType(), pair.tradeType(), e.getMessage());
+          }
         }
       }
     }

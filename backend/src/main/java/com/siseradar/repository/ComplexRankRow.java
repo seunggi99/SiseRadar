@@ -1,8 +1,8 @@
 package com.siseradar.repository;
 
-/** Projection for the per-complex ranking GROUP BY in {@link AptTradeRepository}. */
+/** Projection for per-building ranking. Amounts are the primary amount (만원). */
 public interface ComplexRankRow {
-  String getAptName();
+  String getBuildingName();
 
   long getCnt();
 
@@ -11,4 +11,7 @@ public interface ComplexRankRow {
   long getMaxAmount();
 
   double getAvgPricePerPyeong();
+
+  /** Average 월세 (만원) — null for SALE. */
+  Double getAvgMonthlyRent();
 }

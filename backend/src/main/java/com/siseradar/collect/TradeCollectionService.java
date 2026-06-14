@@ -1,11 +1,12 @@
 package com.siseradar.collect;
 
 import com.siseradar.alert.AlertEvaluationService;
-import com.siseradar.collect.dto.AptTradeApiResponse;
-import com.siseradar.domain.AptTrade;
-import com.siseradar.repository.AptTradeRepository;
+import com.siseradar.collect.dto.RtmsApiResponse;
+import com.siseradar.domain.PropertyType;
+import com.siseradar.domain.RealEstateTransaction;
+import com.siseradar.domain.TradeType;
+import com.siseradar.repository.RealEstateTransactionRepository;
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -17,9 +18,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Fetches every page for a region+month and persists new transactions idempotently:
- * existing natural keys for that month are loaded once, and only unseen rows are inserted,
- * so re-runs (the most recent months keep gaining filings) are safe.
+ * Fetches every page for a region+month+type and persists new transactions idempotently:
+ * existing dedup keys for that (region, month, type) are loaded once, and only unseen rows are
+ * inserted, so re-runs are safe.
  */
 @Service
 public class TradeCollectionService {
@@ -27,13 +28,13 @@ public class TradeCollectionService {
   private static final Logger log = LoggerFactory.getLogger(TradeCollectionService.class);
 
   private final DataGoKrClient client;
-  private final AptTradeRepository repository;
+  private final RealEstateTransactionRepository repository;
   private final CollectionProperties props;
   private final AlertEvaluationService alertEvaluation;
 
   public TradeCollectionService(
       DataGoKrClient client,
-      AptTradeRepository repository,
+      RealEstateTransactionRepository repository,
       CollectionProperties props,
       AlertEvaluationService alertEvaluation) {
     this.client = client;
@@ -42,40 +43,49 @@ public class TradeCollectionService {
     this.alertEvaluation = alertEvaluation;
   }
 
-  /** Result of one region+month collection run. */
-  public record Result(String lawdCd, String dealYmd, int fetched, int inserted, int skipped) {}
+  public record Result(
+      String lawdCd,
+      PropertyType propertyType,
+      TradeType tradeType,
+      String dealYmd,
+      int fetched,
+      int inserted,
+      int skipped) {}
 
   @Transactional
-  public Result collect(String lawdCd, String dealYmd) {
+  public Result collect(
+      String lawdCd, String dealYmd, PropertyType propertyType, TradeType tradeType) {
+    String operationPath = RtmsOperations.operationPath(propertyType, tradeType);
+
     Set<String> existing = new HashSet<>();
     repository
-        .findByLawdCdAndDealYmd(lawdCd, dealYmd)
-        .forEach(t -> existing.add(t.naturalKey()));
+        .findByLawdCdAndDealYmdAndPropertyTypeAndTradeType(lawdCd, dealYmd, propertyType, tradeType)
+        .forEach(t -> existing.add(t.getDedupKey()));
 
     Set<String> seenThisRun = new HashSet<>();
-    List<AptTrade> toInsert = new ArrayList<>();
+    List<RealEstateTransaction> toInsert = new ArrayList<>();
     int fetched = 0;
     int numOfRows = props.numOfRows() > 0 ? props.numOfRows() : 100;
 
     int pageNo = 1;
     while (true) {
-      AptTradeApiResponse res = client.fetch(lawdCd, dealYmd, pageNo, numOfRows);
-      List<AptTradeApiResponse.Item> items =
+      RtmsApiResponse res = client.fetch(operationPath, lawdCd, dealYmd, pageNo, numOfRows);
+      List<RtmsApiResponse.Item> items =
           res.body == null || res.body.items == null || res.body.items.item == null
               ? List.of()
               : res.body.items.item;
 
-      for (AptTradeApiResponse.Item item : items) {
+      for (RtmsApiResponse.Item item : items) {
         fetched++;
-        AptTrade trade = toEntity(lawdCd, dealYmd, item);
-        if (trade == null) {
+        RealEstateTransaction tx = toEntity(lawdCd, dealYmd, propertyType, tradeType, item);
+        if (tx == null) {
           continue;
         }
-        String key = trade.naturalKey();
+        String key = tx.getDedupKey();
         if (existing.contains(key) || !seenThisRun.add(key)) {
           continue;
         }
-        toInsert.add(trade);
+        toInsert.add(tx);
       }
 
       int totalCount = res.body == null ? 0 : res.body.totalCount;
@@ -88,46 +98,69 @@ public class TradeCollectionService {
 
     repository.saveAll(toInsert);
 
-    // Raise watchlist alerts for the newly inserted trades. Never let alerting fail collection.
     try {
-      alertEvaluation.evaluate(lawdCd, dealYmd, toInsert);
+      alertEvaluation.evaluate(lawdCd, dealYmd, propertyType, tradeType, toInsert);
     } catch (RuntimeException e) {
-      log.warn("Alert evaluation failed for {} {}: {}", lawdCd, dealYmd, e.getMessage());
+      log.warn("Alert evaluation failed for {} {} {}/{}: {}", lawdCd, dealYmd, propertyType, tradeType, e.getMessage());
     }
 
-    Result result = new Result(lawdCd, dealYmd, fetched, toInsert.size(), fetched - toInsert.size());
+    Result result =
+        new Result(
+            lawdCd, propertyType, tradeType, dealYmd, fetched, toInsert.size(),
+            fetched - toInsert.size());
     log.info(
-        "Collected {} {}: fetched={} inserted={} skipped={}",
-        lawdCd,
-        dealYmd,
-        result.fetched(),
-        result.inserted(),
-        result.skipped());
+        "Collected {} {} {}/{}: fetched={} inserted={} skipped={}",
+        lawdCd, dealYmd, propertyType, tradeType, fetched, result.inserted(), result.skipped());
     return result;
   }
 
-  private AptTrade toEntity(String lawdCd, String dealYmd, AptTradeApiResponse.Item item) {
+  private RealEstateTransaction toEntity(
+      String lawdCd,
+      String dealYmd,
+      PropertyType propertyType,
+      TradeType tradeType,
+      RtmsApiResponse.Item item) {
     try {
-      long amount = Long.parseLong(item.dealAmount.replace(",", "").trim());
-      // Normalize to the DB column scale (2) so the natural key is stable across re-runs
-      // (DB reloads as e.g. 131.40; a raw "131.4" parse would otherwise miss the dedup check).
-      BigDecimal area = new BigDecimal(item.excluUseAr.trim()).setScale(2, RoundingMode.HALF_UP);
-      int floor = Integer.parseInt(item.floor.trim());
+      BigDecimal area = item.excluUseAr == null ? null : new BigDecimal(item.excluUseAr.trim());
+      Integer floor = parseNullableInt(item.floor);
       Integer buildYear = parseNullableInt(item.buildYear);
       LocalDate dealDate =
           LocalDate.of(
               Integer.parseInt(item.dealYear.trim()),
               Integer.parseInt(item.dealMonth.trim()),
               Integer.parseInt(item.dealDay.trim()));
-      String aptName = item.aptNm == null ? "" : item.aptNm.trim();
+      String buildingName = item.aptNm == null ? null : item.aptNm.trim();
       String umdNm = item.umdNm == null ? null : item.umdNm.trim();
       String jibun = item.jibun == null ? null : item.jibun.trim();
-      return new AptTrade(
-          lawdCd, dealYmd, aptName, umdNm, area, floor, buildYear, amount, jibun, dealDate);
+
+      Long dealAmount = null;
+      Long deposit = null;
+      Integer monthlyRent = null;
+      if (tradeType == TradeType.SALE) {
+        dealAmount = parseManwon(item.dealAmount);
+      } else {
+        deposit = parseManwon(item.deposit);
+        Long mr = parseManwon(item.monthlyRent);
+        monthlyRent = mr == null ? 0 : mr.intValue();
+      }
+
+      return new RealEstateTransaction(
+          propertyType, tradeType, lawdCd, dealYmd, buildingName, umdNm, area, floor, buildYear,
+          dealAmount, deposit, monthlyRent, jibun, dealDate);
     } catch (RuntimeException e) {
-      log.warn("Skipping unparseable item ({} {}): {}", lawdCd, dealYmd, e.getMessage());
+      log.warn(
+          "Skipping unparseable item ({} {} {}/{}): {}",
+          lawdCd, dealYmd, propertyType, tradeType, e.getMessage());
       return null;
     }
+  }
+
+  /** Strips commas, parses 만원 → Long; null/blank → null. */
+  private static Long parseManwon(String raw) {
+    if (raw == null || raw.isBlank()) {
+      return null;
+    }
+    return Long.parseLong(raw.replace(",", "").trim());
   }
 
   private static Integer parseNullableInt(String raw) {

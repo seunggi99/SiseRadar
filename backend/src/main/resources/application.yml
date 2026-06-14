@@ -11,7 +11,7 @@ springdoc:
 
 siseradar:
   datagokr:
-    base-url: https://apis.data.go.kr/1613000/RTMSDataSvcAptTrade
+    base-url: https://apis.data.go.kr/1613000
     service-key: ${DATA_GO_KR_SERVICE_KEY}
   kakao:
     rest-key: ${KAKAO_REST_API_KEY:}

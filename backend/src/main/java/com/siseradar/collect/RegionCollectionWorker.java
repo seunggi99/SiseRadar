@@ -32,13 +32,17 @@ public class RegionCollectionWorker {
     inProgress.add(lawdCd);
     try {
       for (String ym : CollectionScheduler.recentMonths(months)) {
-        try {
-          collection.collect(lawdCd, ym);
-        } catch (RuntimeException e) {
-          log.warn("On-demand collect failed {} {}: {}", lawdCd, ym, e.getMessage());
+        for (RtmsOperations.TypePair pair : RtmsOperations.ENABLED) {
+          try {
+            collection.collect(lawdCd, ym, pair.propertyType(), pair.tradeType());
+          } catch (RuntimeException e) {
+            log.warn(
+                "On-demand collect failed {} {} {}/{}: {}",
+                lawdCd, ym, pair.propertyType(), pair.tradeType(), e.getMessage());
+          }
         }
       }
-      log.info("On-demand backfill done: {} ({} months)", lawdCd, months);
+      log.info("On-demand backfill done: {} ({} months × {} types)", lawdCd, months, RtmsOperations.ENABLED.size());
     } finally {
       inProgress.remove(lawdCd);
     }
