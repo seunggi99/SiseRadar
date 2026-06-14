@@ -19,6 +19,11 @@ export function regionName(lawdCd: string): string {
   return byCode.get(lawdCd)?.name ?? lawdCd;
 }
 
+/** Authoritative check: is this a known South Korean 시군구 code (in the 250 master)? */
+export function isKnownRegion(lawdCd: string): boolean {
+  return byCode.has(lawdCd);
+}
+
 /** Substring search over name / 시군구 / 시도, capped for the autocomplete dropdown. */
 export function searchRegions(query: string, limit = 30): Region[] {
   const q = query.trim();

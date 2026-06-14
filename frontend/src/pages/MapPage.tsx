@@ -6,7 +6,8 @@ import { RadarSpinner } from '../components/RadarSpinner';
 import { RegionSearch } from '../components/RegionSearch';
 import { useFilters } from '../lib/filters';
 import { isInKorea, loadKakao, restrictToKorea } from '../lib/kakaoMap';
-import { regionName } from '../lib/regions';
+import { isKnownRegion, regionName } from '../lib/regions';
+import { useToast } from '../lib/toast';
 
 /**
  * Map tab — skeleton (increment 1): renders a Korea-restricted Kakao map, reflects the shared
@@ -15,6 +16,7 @@ import { regionName } from '../lib/regions';
  */
 export function MapPage() {
   const { lawdCd, propertyType, tradeType, setLawdCd, setProperty, setTradeType } = useFilters();
+  const { toast } = useToast();
   const mapRef = useRef<HTMLDivElement>(null);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState(false);
@@ -32,12 +34,21 @@ export function MapPage() {
         setReady(true);
         kakao.maps.event.addListener(map, 'click', async (e: any) => {
           const ll = e.latLng;
-          if (!isInKorea(ll.getLat(), ll.getLng())) return;
+          // bbox는 거친 1차 필터; 권위 기준은 resolve된 코드가 250 마스터에 있는지.
+          if (!isInKorea(ll.getLat(), ll.getLng())) {
+            toast('국내 지역만 지원해요');
+            return;
+          }
           try {
             const r = await api.regions.resolve(ll.getLng(), ll.getLat());
+            if (!isKnownRegion(r.lawdCd)) {
+              toast('국내 지역만 지원해요');
+              return;
+            }
             setLawdCd(r.lawdCd);
           } catch {
-            /* 국외/행정구역 없음 → 무시 */
+            // 국외·북한·바다 → resolve 404
+            toast('국내 지역만 지원해요');
           }
         });
       })
@@ -45,7 +56,7 @@ export function MapPage() {
     return () => {
       cancelled = true;
     };
-  }, [setLawdCd]);
+  }, [setLawdCd, toast]);
 
   return (
     <div className="min-h-screen">

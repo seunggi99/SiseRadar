@@ -15,9 +15,11 @@ public class KakaoClient {
 
   private final RestClient restClient = RestClient.create();
   private final KakaoProperties props;
+  private final KoreaRegions koreaRegions;
 
-  public KakaoClient(KakaoProperties props) {
+  public KakaoClient(KakaoProperties props, KoreaRegions koreaRegions) {
     this.props = props;
+    this.koreaRegions = koreaRegions;
   }
 
   public record ResolvedRegion(String lawdCd, String sido, String sigungu) {}
@@ -46,8 +48,14 @@ public class KakaoClient {
             .filter(d -> "B".equals(d.regionType))
             .findFirst()
             .orElse(res.documents.get(0));
-    return new ResolvedRegion(
-        doc.code.substring(0, 5), doc.region1depthName, doc.region2depthName);
+    String lawdCd = doc.code == null || doc.code.length() < 5 ? "" : doc.code.substring(0, 5);
+
+    // Authoritative guard: Kakao returns sentinel codes (90000/90005/90009) for 국외·북한·바다.
+    // Only accept codes that exist in the 250 남한 시군구 마스터.
+    if (!koreaRegions.contains(lawdCd)) {
+      throw new ResponseStatusException(HttpStatus.NOT_FOUND, "국내(남한) 시군구만 지원해요");
+    }
+    return new ResolvedRegion(lawdCd, doc.region1depthName, doc.region2depthName);
   }
 
   @JsonIgnoreProperties(ignoreUnknown = true)

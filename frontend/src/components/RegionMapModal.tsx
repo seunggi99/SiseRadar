@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api/client';
-import { loadKakao, restrictToKorea } from '../lib/kakaoMap';
+import { isInKorea, loadKakao, restrictToKorea } from '../lib/kakaoMap';
+import { isKnownRegion } from '../lib/regions';
+import { useToast } from '../lib/toast';
 import { RadarSpinner } from './RadarSpinner';
 
 interface Props {
@@ -9,6 +11,7 @@ interface Props {
 }
 
 export function RegionMapModal({ onSelect, onClose }: Props) {
+  const { toast } = useToast();
   const mapRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState(false);
   const [ready, setReady] = useState(false);
@@ -35,13 +38,23 @@ export function RegionMapModal({ onSelect, onClose }: Props) {
         setReady(true);
         kakao.maps.event.addListener(map, 'click', async (mouseEvent: any) => {
           const ll = mouseEvent.latLng;
+          if (!isInKorea(ll.getLat(), ll.getLng())) {
+            toast('국내 지역만 지원해요');
+            return;
+          }
           setPicking('…');
           try {
             const r = await api.regions.resolve(ll.getLng(), ll.getLat());
+            if (!isKnownRegion(r.lawdCd)) {
+              setPicking(null);
+              toast('국내 지역만 지원해요');
+              return;
+            }
             onSelect(r.lawdCd);
             onClose();
           } catch {
             setPicking(null);
+            toast('국내 지역만 지원해요');
           }
         });
       })
@@ -49,7 +62,7 @@ export function RegionMapModal({ onSelect, onClose }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [onClose, onSelect]);
+  }, [onClose, onSelect, toast]);
 
   return (
     <div
