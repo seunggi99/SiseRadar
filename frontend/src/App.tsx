@@ -3,6 +3,7 @@ import { useAuth } from './lib/auth';
 import { ComparePage } from './pages/ComparePage';
 import { DashboardPage } from './pages/DashboardPage';
 import { LoginPage } from './pages/LoginPage';
+import { MapPage } from './pages/MapPage';
 import { WatchlistPage } from './pages/WatchlistPage';
 
 function RequireAuth({ children }: { children: React.ReactElement }) {
@@ -15,6 +16,7 @@ function App() {
     <Routes>
       <Route path="/" element={<DashboardPage />} />
       <Route path="/compare" element={<ComparePage />} />
+      <Route path="/map" element={<MapPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route
         path="/watchlist"

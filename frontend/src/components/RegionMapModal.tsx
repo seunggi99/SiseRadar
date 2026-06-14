@@ -1,38 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api/client';
+import { loadKakao, restrictToKorea } from '../lib/kakaoMap';
 import { RadarSpinner } from './RadarSpinner';
 
 interface Props {
   onSelect: (lawdCd: string) => void;
   onClose: () => void;
-}
-
-// Kakao Maps JS SDK is loaded on demand; it's an untyped global.
-declare global {
-  interface Window {
-    kakao: any;
-  }
-}
-
-const KAKAO_KEY = import.meta.env.VITE_KAKAO_MAP_KEY;
-
-function loadKakao(): Promise<any> {
-  if (window.kakao?.maps) return Promise.resolve(window.kakao);
-  return new Promise((resolve, reject) => {
-    const finish = () => window.kakao.maps.load(() => resolve(window.kakao));
-    const existing = document.getElementById('kakao-sdk') as HTMLScriptElement | null;
-    if (existing) {
-      existing.addEventListener('load', finish);
-      existing.addEventListener('error', reject);
-      return;
-    }
-    const s = document.createElement('script');
-    s.id = 'kakao-sdk';
-    s.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${KAKAO_KEY}&autoload=false`;
-    s.onload = finish;
-    s.onerror = reject;
-    document.head.appendChild(s);
-  });
 }
 
 export function RegionMapModal({ onSelect, onClose }: Props) {
@@ -58,6 +31,7 @@ export function RegionMapModal({ onSelect, onClose }: Props) {
           center: new kakao.maps.LatLng(37.5172, 127.0473), // 강남 일대
           level: 8,
         });
+        restrictToKorea(kakao, map);
         setReady(true);
         kakao.maps.event.addListener(map, 'click', async (mouseEvent: any) => {
           const ll = mouseEvent.latLng;

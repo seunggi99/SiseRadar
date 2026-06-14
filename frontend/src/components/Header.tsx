@@ -31,6 +31,9 @@ export function Header() {
             <NavLink to="/compare" className={navClass}>
               비교
             </NavLink>
+            <NavLink to="/map" className={navClass}>
+              지도
+            </NavLink>
             {isAuthenticated && (
               <NavLink to="/watchlist" className={navClass}>
                 관심목록

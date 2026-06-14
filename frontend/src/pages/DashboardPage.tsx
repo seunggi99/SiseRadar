@@ -9,7 +9,6 @@ import {
   useMonthlyStats,
   useRegionStatus,
 } from '../api/hooks';
-import type { PropertyType, TradeType } from '../api/types';
 import { AreaBandBreakdown } from '../components/AreaBandBreakdown';
 import { ComplexChangePanel } from '../components/ComplexChangePanel';
 import { ComplexDetailModal } from '../components/ComplexDetailModal';
@@ -23,6 +22,7 @@ import { EmptyState, ErrorState, LoadingState } from '../components/StateViews';
 import { TrendChart } from '../components/TrendChart';
 import { useAuth } from '../lib/auth';
 import { directionColor } from '../lib/colors';
+import { useFilters } from '../lib/filters';
 import { amountLabel, propertyMeta } from '../lib/propertyTypes';
 import { useToast } from '../lib/toast';
 import {
@@ -34,24 +34,16 @@ import {
   formatYmLong,
   perAreaToPyeong,
 } from '../lib/format';
-import { DEFAULT_LAWD_CD, regionName } from '../lib/regions';
+import { regionName } from '../lib/regions';
 
 export function DashboardPage() {
-  const [lawdCd, setLawdCd] = useState(DEFAULT_LAWD_CD);
-  const [propertyType, setPropertyType] = useState<PropertyType>('APT');
-  const [tradeType, setTradeType] = useState<TradeType>('SALE');
+  const { lawdCd, propertyType, tradeType, setLawdCd, setProperty, setTradeType } = useFilters();
   const [selectedComplex, setSelectedComplex] = useState<string | null>(null);
   const [mapOpen, setMapOpen] = useState(false);
   const monthly = useMonthlyStats(lawdCd, propertyType, tradeType);
   const ranking = useComplexRanking(lawdCd, propertyType, tradeType);
   const isRent = tradeType === 'RENT';
   const meta = propertyMeta(propertyType);
-
-  // switching to a sale-only type (토지/상업/산업/분양권) drops RENT back to SALE
-  function changeProperty(pt: PropertyType) {
-    setPropertyType(pt);
-    if (!propertyMeta(pt).rentAvailable) setTradeType('SALE');
-  }
 
   // on-demand collection: regions with no data trigger a background 24-month backfill
   const stats = monthly.data ?? [];
@@ -151,7 +143,7 @@ export function DashboardPage() {
           <PropertyTradeSelector
             propertyType={propertyType}
             tradeType={tradeType}
-            onPropertyChange={changeProperty}
+            onPropertyChange={setProperty}
             onTradeChange={setTradeType}
           />
         </div>

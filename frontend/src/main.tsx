@@ -5,6 +5,7 @@ import { BrowserRouter } from 'react-router-dom';
 import App from './App.tsx';
 import './index.css';
 import { AuthProvider } from './lib/auth';
+import { FilterProvider } from './lib/filters';
 import { ThemeProvider } from './lib/theme';
 import { ToastProvider } from './lib/toast';
 
@@ -24,9 +25,11 @@ createRoot(document.getElementById('root')!).render(
       <QueryClientProvider client={queryClient}>
         <BrowserRouter>
           <AuthProvider>
-            <ToastProvider>
-              <App />
-            </ToastProvider>
+            <FilterProvider>
+              <ToastProvider>
+                <App />
+              </ToastProvider>
+            </FilterProvider>
           </AuthProvider>
         </BrowserRouter>
       </QueryClientProvider>
