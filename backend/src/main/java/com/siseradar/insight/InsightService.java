@@ -114,7 +114,7 @@ public class InsightService {
     if (monthly.isEmpty()) {
       return new InsightBasis(
           regionLabel(lawdCd), propertyLabel, tradeLabel, metricLabel,
-          null, null, 0, 0, 0, 0, 0, null, List.of(), false);
+          null, null, 0, 0, 0, 0, 0, null, null, 0, List.of(), false);
     }
 
     MonthlyStatsResponse latest = monthly.get(monthly.size() - 1);
@@ -123,9 +123,13 @@ public class InsightService {
     long avgPerPyeong = Math.round(avgPerSqm * PYEONG);
     long medianPerPyeong = Math.round(latest.medianPricePerArea() * PYEONG);
 
-    // 동일단지 1년 변동률 (구성편향 통제) — 두 기간 거래 없으면 null
-    ComplexChangeResponse change = stats.complexChange(lawdCd, pt, tt, null, null);
-    Double change1y = change.sameStoreAvgChangePct();
+    // 동일단지(같은 건물+평형대) 변동률 — 대시보드 '동일 단지 추세' 카드와 동일한 호출:
+    // 로드된 데이터 범위(최초월→최근월) 기준. 두 시점 매칭 단지 없으면 null.
+    ComplexChangeResponse change =
+        stats.complexChange(lawdCd, pt, tt, monthly.get(0).ym(), latest.ym());
+    Double changeAvg = change.sameStoreAvgChangePct();
+    Double changeMedian = change.sameStoreMedianChangePct();
+    int changeMatched = change.matchedComplexes();
 
     // 평형대 분포: 기간 전체 거래량 합산
     Map<String, Long> bandTotals = new LinkedHashMap<>();
@@ -151,7 +155,9 @@ public class InsightService {
         medianPerPyeong,
         avgPerSqm,
         totalVolume,
-        change1y,
+        changeAvg,
+        changeMedian,
+        changeMatched,
         bands,
         true);
   }
@@ -168,6 +174,9 @@ public class InsightService {
         .append("데이터 기간이 ")
         .append(b.months())
         .append("개월이라는 점을 자연스럽게 한 번 녹이세요.\n")
+        .append("- 변동률은 아래 '동일단지 변동률' 값을 그대로 쓰고, 비교 기간(")
+        .append(b.periodFrom()).append("~").append(b.periodTo())
+        .append(")을 함께 적으세요. '1년' 등 임의 기간으로 표현하지 마세요.\n")
         .append("- 마크다운·불릿 없이 줄글로.\n\n")
         .append("[확정 수치]\n")
         .append("지역: ").append(b.region()).append("\n")
@@ -177,7 +186,10 @@ public class InsightService {
         .append("최근월 ").append(b.metricLabel()).append(" 평균: ").append(b.avgPerPyeong())
         .append("만원/평, 중위: ").append(b.medianPerPyeong()).append("만원/평\n")
         .append("기간 총 거래량: ").append(b.totalVolume()).append("건\n")
-        .append("동일단지 1년 변동률: ").append(changeText(b.change1yPct())).append("\n")
+        .append("동일단지(같은 건물+평형대) 변동률 — 평균: ").append(changeText(b.changeAvgPct()))
+        .append(", 중위: ").append(changeText(b.changeMedianPct()))
+        .append(b.changeMatched() > 0 ? " (동일 " + b.changeMatched() + "단지 매칭)" : "")
+        .append("\n")
         .append("평형대 분포(거래량): ").append(bandsText(b.bands())).append("\n");
     return sb.toString();
   }
@@ -185,11 +197,11 @@ public class InsightService {
   private String templateSummary(InsightBasis b) {
     return String.format(
         "%s %s %s는 최근월(%s) 기준 %s 평균 %,d만원/평(중위 %,d만원/평)이며, "
-            + "최근 %d개월간 총 %,d건이 거래됐습니다. 동일단지 1년 변동률은 %s입니다. "
-            + "평균은 거래 구성에 영향받을 수 있으며 면적은 전용면적 기준입니다.",
+            + "%s~%s(%d개월) 총 %,d건이 거래됐습니다. 같은 건물·평형대 기준 동일단지 변동률은 "
+            + "평균 %s(중위 %s)입니다. 평균은 거래 구성에 영향받을 수 있으며 면적은 전용면적 기준입니다.",
         b.region(), b.propertyLabel(), b.tradeLabel(), b.periodTo(), b.metricLabel(),
-        b.avgPerPyeong(), b.medianPerPyeong(), b.months(), b.totalVolume(),
-        changeText(b.change1yPct()));
+        b.avgPerPyeong(), b.medianPerPyeong(), b.periodFrom(), b.periodTo(), b.months(),
+        b.totalVolume(), changeText(b.changeAvgPct()), changeText(b.changeMedianPct()));
   }
 
   private static String changeText(Double pct) {

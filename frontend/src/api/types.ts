@@ -134,7 +134,10 @@ export interface InsightBasis {
   medianPerPyeong: number;
   avgPerSqm: number;
   totalVolume: number;
-  change1yPct: number | null;
+  /** 동일단지(같은 건물+평형대) 변동률 — 대시보드 '동일 단지 추세' 카드와 동일 값·기간. */
+  changeAvgPct: number | null;
+  changeMedianPct: number | null;
+  changeMatched: number;
   bands: { band: string; count: number }[];
   hasData: boolean;
 }

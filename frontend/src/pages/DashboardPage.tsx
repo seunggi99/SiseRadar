@@ -170,7 +170,11 @@ export function DashboardPage() {
                 value={formatEok(latest.avgAmount)}
                 sub={formatManwon(latest.avgAmount)}
               />
-              <KpiCard label="거래량" value={`${formatCount(latest.count)}건`} />
+              <KpiCard
+                label="거래량 (최근월)"
+                value={`${formatCount(latest.count)}건`}
+                sub={`${formatYmLong(latest.ym)} · 전체 기간은 AI 요약 참고`}
+              />
               <KpiCard
                 label="전월 대비"
                 value={latest.momChangePct === null ? '—' : formatPercent(latest.momChangePct)}
