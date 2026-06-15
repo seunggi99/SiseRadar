@@ -22,18 +22,16 @@ export function useComplexRanking(
   });
 }
 
-/** Same-complex (building + area-band) change over a period — composition-controlled trend. */
-export function useComplexChange(
+/** 동일단지 변동률 — 최근 12개월 vs 직전 12개월 고정(지도·대시보드·AI 공유 단일 지표). */
+export function useSameStoreChange(
   lawdCd: string,
   propertyType: PropertyType,
   tradeType: TradeType,
-  from: string | undefined,
-  to: string | undefined,
   enabled: boolean,
 ) {
   return useQuery({
-    queryKey: ['complexChange', lawdCd, propertyType, tradeType, from, to],
-    queryFn: () => api.complexChange(lawdCd, propertyType, tradeType, from, to),
+    queryKey: ['sameStoreChange', lawdCd, propertyType, tradeType],
+    queryFn: () => api.sameStoreChange(lawdCd, propertyType, tradeType),
     enabled,
   });
 }

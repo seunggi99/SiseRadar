@@ -4,10 +4,10 @@ import { ApiError } from '../api/client';
 import {
   useAddWatchlist,
   useCollectRegion,
-  useComplexChange,
   useComplexRanking,
   useMonthlyStats,
   useRegionStatus,
+  useSameStoreChange,
 } from '../api/hooks';
 import { AreaBandBreakdown } from '../components/AreaBandBreakdown';
 import { ComplexChangePanel } from '../components/ComplexChangePanel';
@@ -49,14 +49,12 @@ export function DashboardPage() {
   // on-demand collection: regions with no data trigger a background 24-month backfill
   const stats = monthly.data ?? [];
   const noData = !monthly.isLoading && !monthly.isError && stats.length === 0;
-  // same-store change over the loaded data range (building-name types only)
-  const change = useComplexChange(
+  // 동일단지 변동률 — 최근 12개월 vs 직전 12개월 고정(지도·AI와 같은 단일 지표). 건물형 유형만.
+  const change = useSameStoreChange(
     lawdCd,
     propertyType,
     tradeType,
-    stats[0]?.ym,
-    stats[stats.length - 1]?.ym,
-    propertyMeta(propertyType).hasRanking && stats.length >= 2,
+    propertyMeta(propertyType).hasRanking && !noData,
   );
   const regionStatus = useRegionStatus(lawdCd, noData);
   const collectRegion = useCollectRegion();
@@ -200,8 +198,8 @@ export function DashboardPage() {
               enabled={!!latest}
             />
 
-            {/* same-complex (composition-controlled) trend */}
-            {change.data && <ComplexChangePanel data={change.data} />}
+            {/* 동일단지 변동(최근 12개월 vs 직전 12개월) — 건물형 유형만, 데이터 부족도 표시 */}
+            {meta.hasRanking && change.data && <ComplexChangePanel data={change.data} />}
 
             {/* trend chart */}
             <section className="sr-card">

@@ -7,9 +7,11 @@ import com.siseradar.repository.ComplexChangeRow;
 import com.siseradar.repository.ComplexRankRow;
 import com.siseradar.repository.MonthlyStatRow;
 import com.siseradar.repository.RealEstateTransactionRepository;
+import com.siseradar.repository.SameStoreChangeRow;
 import com.siseradar.web.dto.ComplexChangeResponse;
 import com.siseradar.web.dto.ComplexRankResponse;
 import com.siseradar.web.dto.MonthlyStatsResponse;
+import com.siseradar.web.dto.SameStoreChangeResponse;
 import com.siseradar.web.dto.MonthlyStatsResponse.BandStat;
 import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
@@ -140,6 +142,38 @@ public class StatsService {
     }
 
     return new ComplexChangeResponse(fromYm, toYm, pcts.size(), avg, median, naive);
+  }
+
+  private static final int CHANGE_MONTHS = 12;
+
+  /**
+   * 동일단지(같은 건물) 변동률 — 최근 12개월 vs 직전 12개월 고정 윈도(전국 데이터의 최신월 기준).
+   * 지도 버블·대시보드 카드·AI 요약이 공유하는 단일 계산. 두 윈도에 모두 거래된 단지가 없으면
+   * (24개월 미충족 등) hasData=false(데이터 부족).
+   */
+  public SameStoreChangeResponse sameStoreChange12(String lawdCd, PropertyType pt, TradeType tt) {
+    String anchor = repository.globalLatestYmd(pt, tt);
+    if (anchor == null) {
+      return new SameStoreChangeResponse(false, null, null, 0, null, null, null, null);
+    }
+    YearMonth a = YearMonth.parse(anchor, YM);
+    String curFrom = a.minusMonths(CHANGE_MONTHS - 1L).format(YM);
+    String curTo = anchor;
+    String prevFrom = a.minusMonths(2L * CHANGE_MONTHS - 1).format(YM);
+    String prevTo = a.minusMonths(CHANGE_MONTHS).format(YM);
+
+    SameStoreChangeRow r =
+        repository.sameStoreChange12(lawdCd, pt.name(), tt.name(), curFrom, curTo, prevFrom, prevTo);
+    boolean hasData = r.getMatched() > 0 && r.getAvgPct() != null;
+    return new SameStoreChangeResponse(
+        hasData,
+        hasData ? round1(r.getAvgPct()) : null,
+        hasData && r.getMedianPct() != null ? round1(r.getMedianPct()) : null,
+        r.getMatched(),
+        curFrom,
+        curTo,
+        prevFrom,
+        prevTo);
   }
 
   private static Double round1(double v) {

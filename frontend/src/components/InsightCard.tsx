@@ -61,7 +61,7 @@ export function InsightCard({
             <p className="sr-muted mt-2 text-xs">
               기준 지표 · {d.basis.metricLabel} 평균{' '}
               <span className="sr-num">{d.basis.avgPerPyeong.toLocaleString('ko-KR')}만/평</span> · 기간 거래{' '}
-              <span className="sr-num">{d.basis.totalVolume.toLocaleString('ko-KR')}건</span> · 동일단지 변동{' '}
+              <span className="sr-num">{d.basis.totalVolume.toLocaleString('ko-KR')}건</span> · 동일단지 변동(최근 12개월 vs 직전 12개월){' '}
               <span className="sr-num">{changeText(d.basis.changeAvgPct)}</span>
               {d.basis.changeMedianPct != null && (
                 <span className="sr-num"> (중위 {changeText(d.basis.changeMedianPct)})</span>

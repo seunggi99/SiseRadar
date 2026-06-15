@@ -326,6 +326,39 @@ public interface RealEstateTransactionRepository extends JpaRepository<RealEstat
       @Param("prevFrom") String prevFrom,
       @Param("prevTo") String prevTo);
 
+  /**
+   * One region's 동일단지(same-store) 변동률 over a fixed current/prior 12-month window — the SINGLE
+   * canonical 변동률 calc shared by the map bubble, dashboard card, and AI summary. Per building:
+   * avg 전용 단위면적가 in each window; keep buildings present in BOTH; region avg + median of the
+   * per-building % change, and the matched-building count. matched=0 → 데이터 부족 (no forced 0%).
+   */
+  @Query(
+      value =
+          """
+          SELECT AVG((sub.cur - sub.prev) / sub.prev * 100) AS avgPct,
+                 PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY (sub.cur - sub.prev) / sub.prev * 100) AS medianPct,
+                 COUNT(*) AS matched
+          FROM (
+            SELECT t.building_name AS bn,
+                   AVG(CASE WHEN t.deal_ymd BETWEEN :curFrom AND :curTo THEN COALESCE(t.deal_amount, t.deposit) / NULLIF(t.area, 0) END) AS cur,
+                   AVG(CASE WHEN t.deal_ymd BETWEEN :prevFrom AND :prevTo THEN COALESCE(t.deal_amount, t.deposit) / NULLIF(t.area, 0) END) AS prev
+            FROM real_estate_transaction t
+            WHERE t.lawd_cd = :lawdCd AND t.property_type = :pt AND t.trade_type = :tt
+              AND t.building_name IS NOT NULL
+            GROUP BY t.building_name
+          ) sub
+          WHERE sub.cur IS NOT NULL AND sub.prev IS NOT NULL AND sub.prev <> 0
+          """,
+      nativeQuery = true)
+  SameStoreChangeRow sameStoreChange12(
+      @Param("lawdCd") String lawdCd,
+      @Param("pt") String propertyType,
+      @Param("tt") String tradeType,
+      @Param("curFrom") String curFrom,
+      @Param("curTo") String curTo,
+      @Param("prevFrom") String prevFrom,
+      @Param("prevTo") String prevTo);
+
   /** Latest 거래월 for one building — the anchor for its 변동률 windows. */
   @Query(
       "SELECT MAX(t.dealYmd) FROM RealEstateTransaction t "

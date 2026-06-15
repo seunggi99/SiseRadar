@@ -5,6 +5,7 @@ import com.siseradar.domain.TradeType;
 import com.siseradar.web.dto.ComplexChangeResponse;
 import com.siseradar.web.dto.ComplexRankResponse;
 import com.siseradar.web.dto.MonthlyStatsResponse;
+import com.siseradar.web.dto.SameStoreChangeResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.List;
@@ -46,7 +47,7 @@ public class StatsController {
   }
 
   @GetMapping("/complex-change")
-  @Operation(summary = "동일 단지(건물+평형대) 변동률 — 구성 편향 통제한 진짜 추세")
+  @Operation(summary = "동일 단지(건물+평형대) 변동률 — 임의 두 시점 (레거시)")
   public ComplexChangeResponse complexChange(
       @RequestParam String lawdCd,
       @RequestParam(required = false, defaultValue = "APT") PropertyType propertyType,
@@ -54,5 +55,15 @@ public class StatsController {
       @RequestParam(required = false) String from,
       @RequestParam(required = false) String to) {
     return statsService.complexChange(lawdCd, propertyType, tradeType, from, to);
+  }
+
+  @GetMapping("/same-store-change")
+  @Operation(
+      summary = "동일단지 변동률 (최근 12개월 vs 직전 12개월 고정) — 지도·대시보드·AI 공유 단일 지표")
+  public SameStoreChangeResponse sameStoreChange(
+      @RequestParam String lawdCd,
+      @RequestParam(required = false, defaultValue = "APT") PropertyType propertyType,
+      @RequestParam(required = false, defaultValue = "SALE") TradeType tradeType) {
+    return statsService.sameStoreChange12(lawdCd, propertyType, tradeType);
   }
 }

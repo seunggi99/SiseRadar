@@ -3,7 +3,6 @@ import type {
   AlertRule,
   AuthResponse,
   Bounds,
-  ComplexChange,
   ComplexRank,
   MapComplex,
   MapComplexChange,
@@ -13,6 +12,7 @@ import type {
   PageResponse,
   PropertyType,
   RegionInsight,
+  SameStoreChange,
   RegionStatus,
   ResolvedRegion,
   Trade,
@@ -110,15 +110,10 @@ export const api = {
       params: { lawdCd, propertyType, tradeType, ym },
     }),
 
-  complexChange: (
-    lawdCd: string,
-    propertyType: PropertyType,
-    tradeType: TradeType,
-    from?: string,
-    to?: string,
-  ) =>
-    request<ComplexChange>('GET', '/api/stats/complex-change', {
-      params: { lawdCd, propertyType, tradeType, from, to },
+  /** 동일단지 변동률 — 최근 12개월 vs 직전 12개월 고정(지도·대시보드·AI 공유 단일 지표). */
+  sameStoreChange: (lawdCd: string, propertyType: PropertyType, tradeType: TradeType) =>
+    request<SameStoreChange>('GET', '/api/stats/same-store-change', {
+      params: { lawdCd, propertyType, tradeType },
     }),
 
   trades: (params: {

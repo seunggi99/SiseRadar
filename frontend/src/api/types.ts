@@ -150,13 +150,19 @@ export interface RegionInsight {
   basis: InsightBasis;
 }
 
-export interface ComplexChange {
-  fromYm: string | null;
-  toYm: string | null;
-  matchedComplexes: number;
-  sameStoreAvgChangePct: number | null;
-  sameStoreMedianChangePct: number | null;
-  naiveChangePct: number | null;
+/**
+ * 동일단지(같은 건물) 변동률 — 최근 12개월 vs 직전 12개월 고정 윈도. 지도 버블·대시보드 카드·
+ * AI 요약이 공유하는 단일 지표. hasData=false면 데이터 부족(24개월 미충족).
+ */
+export interface SameStoreChange {
+  hasData: boolean;
+  avgPct: number | null;
+  medianPct: number | null;
+  matched: number;
+  curFrom: string | null;
+  curTo: string | null;
+  prevFrom: string | null;
+  prevTo: string | null;
 }
 
 // ── auth / watchlist / alerts / notifications ──────────────────────────────
