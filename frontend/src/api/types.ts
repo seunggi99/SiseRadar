@@ -75,6 +75,7 @@ export interface ComplexRank {
 }
 
 export interface MapComplex {
+  lawdCd: string;
   buildingName: string;
   lat: number;
   lng: number;
@@ -82,6 +83,19 @@ export interface MapComplex {
   avgPricePerArea: number;
   medianPricePerArea: number;
   count: number;
+}
+
+/** 단일 단지 평당가(전용) 변동률 — 현재 12개월 vs 직전 12개월. hasData=false면 "변동 데이터 부족". */
+export interface MapComplexChange {
+  hasData: boolean;
+  /** % 변동 (상승 +, 하락 −) — hasData=false면 null. */
+  changePct: number | null;
+  currentCount: number;
+  previousCount: number;
+  currentFrom: string;
+  currentTo: string;
+  previousFrom: string;
+  previousTo: string;
 }
 
 /** Viewport bounding box (lat/lng) for fetching markers in view. */

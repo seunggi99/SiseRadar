@@ -9,7 +9,10 @@ import com.siseradar.repository.ComplexGeocodeRepository;
 import com.siseradar.repository.MapComplexStatRow;
 import com.siseradar.repository.MapRegionStatRow;
 import com.siseradar.repository.RealEstateTransactionRepository;
+import com.siseradar.repository.ComplexPeriodRow;
 import com.siseradar.repository.RegionCentroidRepository;
+import java.time.YearMonth;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
@@ -27,6 +30,9 @@ import org.springframework.stereotype.Service;
 @Service
 public class MapService {
 
+  private static final DateTimeFormatter YM = DateTimeFormatter.ofPattern("yyyyMM");
+  /** Length of the current/prior comparison windows for 단지 변동률. */
+  private static final int CHANGE_MONTHS = 12;
   /** Max new buildings to geocode per request (Kakao quota guard). */
   private static final int GEOCODE_CAP = 25;
   /** Max region centroids to geocode per /regions request (one-time, tiny). */
@@ -129,6 +135,7 @@ public class MapService {
         if (g.getStatus() == GeocodeStatus.SUCCESS && g.getLat() != null && g.getLng() != null) {
           out.add(
               new MapComplexResponse(
+                  lawdCd,
                   row.getBuildingName(),
                   g.getLat(),
                   g.getLng(),
@@ -190,5 +197,57 @@ public class MapService {
       }
     }
     return out;
+  }
+
+  /**
+   * One building's 평당가(전용) 변동률: current 12 months vs the preceding 12 months, anchored on
+   * the building's latest 거래월, optionally within one 평형대. Both windows must have transactions
+   * — otherwise {@code hasData=false} ("변동 데이터 부족"), never a misleading 0%.
+   */
+  public MapComplexChangeResponse complexChange(
+      String lawdCd, PropertyType pt, TradeType tt, String buildingName, String band) {
+    String anchor = trades.complexLatestYmd(lawdCd, pt, tt, buildingName);
+    if (anchor == null) {
+      return insufficient(null, null, null, null);
+    }
+    YearMonth a = YearMonth.parse(anchor, YM);
+    String curFrom = a.minusMonths(CHANGE_MONTHS - 1L).format(YM);
+    String curTo = anchor;
+    String prevFrom = a.minusMonths(2L * CHANGE_MONTHS - 1).format(YM);
+    String prevTo = a.minusMonths(CHANGE_MONTHS).format(YM);
+    String bandFilter = (band == null || band.isBlank()) ? null : band;
+
+    ComplexPeriodRow cur =
+        trades.complexPeriodStat(lawdCd, pt.name(), tt.name(), buildingName, curFrom, curTo, bandFilter);
+    ComplexPeriodRow prev =
+        trades.complexPeriodStat(
+            lawdCd, pt.name(), tt.name(), buildingName, prevFrom, prevTo, bandFilter);
+
+    boolean hasData =
+        cur.getCnt() > 0
+            && prev.getCnt() > 0
+            && cur.getAvgPricePerArea() != null
+            && prev.getAvgPricePerArea() != null
+            && prev.getAvgPricePerArea() != 0;
+    if (!hasData) {
+      return new MapComplexChangeResponse(
+          false, null, cur.getCnt(), prev.getCnt(), curFrom, curTo, prevFrom, prevTo);
+    }
+    double pct =
+        (cur.getAvgPricePerArea() - prev.getAvgPricePerArea()) / prev.getAvgPricePerArea() * 100.0;
+    return new MapComplexChangeResponse(
+        true,
+        Math.round(pct * 10) / 10.0,
+        cur.getCnt(),
+        prev.getCnt(),
+        curFrom,
+        curTo,
+        prevFrom,
+        prevTo);
+  }
+
+  private static MapComplexChangeResponse insufficient(
+      String cf, String ct, String pf, String pt) {
+    return new MapComplexChangeResponse(false, null, 0, 0, cf, ct, pf, pt);
   }
 }

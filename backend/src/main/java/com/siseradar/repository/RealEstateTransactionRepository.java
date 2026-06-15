@@ -232,6 +232,46 @@ public interface RealEstateTransactionRepository extends JpaRepository<RealEstat
       @Param("pt") PropertyType propertyType,
       @Param("tt") TradeType tradeType);
 
+  /** Latest 거래월 for one building — the anchor for its 변동률 windows. */
+  @Query(
+      "SELECT MAX(t.dealYmd) FROM RealEstateTransaction t "
+          + "WHERE t.lawdCd = :lawdCd AND t.propertyType = :pt AND t.tradeType = :tt "
+          + "AND t.buildingName = :bn")
+  String complexLatestYmd(
+      @Param("lawdCd") String lawdCd,
+      @Param("pt") PropertyType propertyType,
+      @Param("tt") TradeType tradeType,
+      @Param("bn") String buildingName);
+
+  /**
+   * 단위면적가(전용, 만원/㎡) 평균 + 거래 건수 for ONE building over a [from,to] window (optional
+   * 평형대). Aggregate w/o GROUP BY → always one row; cnt=0 / avg=null when no transactions.
+   */
+  @Query(
+      value =
+          """
+          SELECT AVG(COALESCE(t.deal_amount, t.deposit) / NULLIF(t.area, 0)) AS avgPricePerArea,
+                 COUNT(*) AS cnt
+          FROM real_estate_transaction t
+          WHERE t.lawd_cd = :lawdCd AND t.property_type = :pt AND t.trade_type = :tt
+            AND t.building_name = :bn
+            AND t.deal_ymd >= :from AND t.deal_ymd <= :to
+            AND (:band IS NULL OR
+                 CASE WHEN t.area <= 60 THEN 'SMALL'
+                      WHEN t.area <= 85 THEN 'MID_SMALL'
+                      WHEN t.area <= 135 THEN 'MID_LARGE'
+                      ELSE 'LARGE' END = :band)
+          """,
+      nativeQuery = true)
+  ComplexPeriodRow complexPeriodStat(
+      @Param("lawdCd") String lawdCd,
+      @Param("pt") String propertyType,
+      @Param("tt") String tradeType,
+      @Param("bn") String buildingName,
+      @Param("from") String from,
+      @Param("to") String to,
+      @Param("band") String band);
+
   @Query(
       "SELECT COUNT(DISTINCT t.dealYmd) FROM RealEstateTransaction t "
           + "WHERE t.lawdCd = :lawdCd AND t.propertyType = :pt AND t.tradeType = :tt")

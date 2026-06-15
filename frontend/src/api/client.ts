@@ -6,6 +6,7 @@ import type {
   ComplexChange,
   ComplexRank,
   MapComplex,
+  MapComplexChange,
   MapRegion,
   MonthlyStats,
   NotificationItem,
@@ -197,6 +198,16 @@ export const api = {
     ) =>
       request<MapRegion[]>('GET', '/api/map/regions', {
         params: { propertyType, tradeType, from, to, band },
+      }),
+    complexChange: (
+      lawdCd: string,
+      buildingName: string,
+      propertyType: PropertyType,
+      tradeType: TradeType,
+      band?: string,
+    ) =>
+      request<MapComplexChange>('GET', '/api/map/complex-change', {
+        params: { lawdCd, buildingName, propertyType, tradeType, band },
       }),
   },
 

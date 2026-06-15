@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client';
 import { useMapComplexesInBounds, useMapRegions } from '../api/hooks';
-import type { Bounds, MapComplex, MapRegion } from '../api/types';
+import type { Bounds, MapComplex, MapComplexChange, MapRegion } from '../api/types';
 import { Header } from '../components/Header';
 import { PropertyTradeSelector } from '../components/PropertyTradeSelector';
 import { RadarSpinner } from '../components/RadarSpinner';
@@ -35,11 +35,32 @@ const sqm = (v: number) => Math.round(v).toLocaleString('ko-KR');
 /** 큰 수는 "2.9k"로 압축 — 버블·클러스터 라벨 공용(둘 다 거래 건수 단위). */
 const compact = (n: number) => (n >= 1000 ? `${Math.round(n / 100) / 10}k` : String(n));
 
-function complexPopupHtml(c: MapComplex): string {
-  return `<div class="sr-surface" style="padding:8px 11px;font-size:12px;min-width:160px;transform:translateY(-10px);box-shadow:0 6px 20px rgba(0,0,0,.25)">
+// 상승=빨강/하락=파랑 — 변동률은 빨강·파랑을 쓰는 유일한 곳(가격 '수준' teal 스케일과 분리).
+const UP_RED = '#E5484D';
+const DOWN_BLUE = '#2F6FED';
+
+/** 변동률 한 줄 — 로딩/데이터부족/±% (색은 상승 빨강·하락 파랑). */
+function changeLineHtml(change: MapComplexChange | 'loading' | 'error'): string {
+  if (change === 'loading') {
+    return `<div class="sr-num" style="color:var(--sr-text-muted)">평당가 변동 불러오는 중…</div>`;
+  }
+  if (change === 'error' || !change.hasData) {
+    return `<div class="sr-num" style="color:var(--sr-text-muted)">평당가 변동 데이터 부족 (두 기간 거래 필요)</div>`;
+  }
+  const pct = change.changePct ?? 0;
+  const color = pct > 0 ? UP_RED : pct < 0 ? DOWN_BLUE : 'var(--sr-text-muted)';
+  const arrow = pct > 0 ? '▲' : pct < 0 ? '▼' : '·';
+  const sign = pct > 0 ? '+' : '';
+  return `<div class="sr-num" style="color:var(--sr-text-muted)">평당가 변동 (최근 12개월 vs 직전 12개월)</div>
+    <div class="sr-num" style="font-weight:600;color:${color}">${arrow} ${sign}${pct.toFixed(1)}%</div>`;
+}
+
+function complexPopupHtml(c: MapComplex, change: MapComplexChange | 'loading' | 'error'): string {
+  return `<div class="sr-surface" style="padding:8px 11px;font-size:12px;min-width:170px;transform:translateY(-10px);box-shadow:0 6px 20px rgba(0,0,0,.25)">
     <div style="font-weight:500;margin-bottom:3px;color:var(--sr-text)">${escapeHtml(c.buildingName)}</div>
     <div class="sr-num" style="color:var(--sr-text)">평당(전용) 평균 ${pyeong(c.avgPricePerArea)}만 · 중위 ${pyeong(c.medianPricePerArea)}만</div>
     <div class="sr-num" style="color:var(--sr-text-muted)">㎡당 ${sqm(c.avgPricePerArea)}만 · 거래 ${c.count}건</div>
+    <div style="margin-top:5px;padding-top:5px;border-top:0.5px solid var(--sr-border)">${changeLineHtml(change)}</div>
   </div>`;
 }
 
@@ -210,16 +231,25 @@ export function MapPage() {
         overlay.current?.setMap(null);
         overlay.current = new kakao.maps.CustomOverlay({
           position: marker.getPosition(),
-          content: complexPopupHtml(c),
+          content: complexPopupHtml(c, 'loading'),
           yAnchor: 1,
           zIndex: 100,
         });
         overlay.current.setMap(mapObj.current);
+        const mine = overlay.current; // 다른 마커 클릭 시 stale 업데이트 방지
+        api.map
+          .complexChange(c.lawdCd, c.buildingName, propertyType, tradeType, band ?? undefined)
+          .then((ch) => {
+            if (overlay.current === mine) mine.setContent(complexPopupHtml(c, ch));
+          })
+          .catch(() => {
+            if (overlay.current === mine) mine.setContent(complexPopupHtml(c, 'error'));
+          });
       });
       return marker;
     });
     clusterer.current.addMarkers(markers);
-  }, [markerData, ready, showBubbles, tradeType]);
+  }, [markerData, ready, showBubbles, tradeType, propertyType, band]);
 
   // 지역 버블: 저줌(showBubbles)일 때만. 마커와 같은 절대 색 스케일 공유. 클릭 → 줌인 + 지역 동기화.
   useEffect(() => {

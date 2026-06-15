@@ -46,6 +46,19 @@ public class MapController {
     return mapService.complexes(lawdCd, propertyType, tradeType, from, to, band);
   }
 
+  @GetMapping("/complex-change")
+  @Operation(
+      summary = "단일 단지 평당가(전용) 변동률 (현재 12개월 vs 직전 12개월, 같은 건물·평형대)",
+      description = "두 기간 모두 거래가 있어야 계산 — 한쪽이라도 없으면 hasData=false(변동 데이터 부족)")
+  public MapComplexChangeResponse complexChange(
+      @RequestParam String lawdCd,
+      @RequestParam String buildingName,
+      @RequestParam(required = false, defaultValue = "APT") PropertyType propertyType,
+      @RequestParam(required = false, defaultValue = "SALE") TradeType tradeType,
+      @RequestParam(required = false) String band) {
+    return mapService.complexChange(lawdCd, propertyType, tradeType, buildingName, band);
+  }
+
   @GetMapping("/regions")
   @Operation(summary = "저줌 지역 버블 (전체 거래 기준 전용 단위면적가·거래량, 카카오 호출 0)")
   public List<MapRegionResponse> regions(
