@@ -121,6 +121,32 @@ export interface MapRegion {
   changePct: number | null;
 }
 
+/** AI 시장 요약이 근거한 확정 수치 (대시보드와 동일 출처). */
+export interface InsightBasis {
+  region: string;
+  propertyLabel: string;
+  tradeLabel: string;
+  metricLabel: string;
+  periodFrom: string | null;
+  periodTo: string | null;
+  months: number;
+  avgPerPyeong: number;
+  medianPerPyeong: number;
+  avgPerSqm: number;
+  totalVolume: number;
+  change1yPct: number | null;
+  bands: { band: string; count: number }[];
+  hasData: boolean;
+}
+
+export interface RegionInsight {
+  summary: string;
+  generatedAt: string;
+  /** "ai" = LLM 생성, "fallback" = 템플릿(키 없음·쿼터·일시오류). */
+  source: 'ai' | 'fallback';
+  basis: InsightBasis;
+}
+
 export interface ComplexChange {
   fromYm: string | null;
   toYm: string | null;

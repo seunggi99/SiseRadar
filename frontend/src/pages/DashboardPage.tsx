@@ -14,6 +14,7 @@ import { ComplexChangePanel } from '../components/ComplexChangePanel';
 import { ComplexDetailModal } from '../components/ComplexDetailModal';
 import { ComplexRankingTable } from '../components/ComplexRankingTable';
 import { Header } from '../components/Header';
+import { InsightCard } from '../components/InsightCard';
 import { KpiCard } from '../components/KpiCard';
 import { PropertyTradeSelector } from '../components/PropertyTradeSelector';
 import { RegionMapModal } from '../components/RegionMapModal';
@@ -186,6 +187,14 @@ export function DashboardPage() {
                 }
               />
             </section>
+
+            {/* AI 시장 요약 — 계산된 통계를 자연어로 (챗봇 아님) */}
+            <InsightCard
+              lawdCd={lawdCd}
+              propertyType={propertyType}
+              tradeType={tradeType}
+              enabled={!!latest}
+            />
 
             {/* same-complex (composition-controlled) trend */}
             {change.data && <ComplexChangePanel data={change.data} />}

@@ -52,6 +52,21 @@ export function useComplexTrades(
   });
 }
 
+/** 선택 지역 AI 시장 요약 — 백엔드 캐시(하루 TTL)라 지역/유형당 LLM 호출은 드물게. */
+export function useRegionInsight(
+  lawdCd: string,
+  propertyType: PropertyType,
+  tradeType: TradeType,
+  enabled: boolean,
+) {
+  return useQuery({
+    queryKey: ['insight', lawdCd, propertyType, tradeType],
+    queryFn: () => api.insights.region(lawdCd, propertyType, tradeType),
+    enabled,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
 // ── map ──
 export function useMapComplexes(
   lawdCd: string,

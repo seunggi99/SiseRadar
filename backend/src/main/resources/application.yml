@@ -15,6 +15,9 @@ siseradar:
     service-key: ${DATA_GO_KR_SERVICE_KEY}
   kakao:
     rest-key: ${KAKAO_REST_API_KEY:}
+  gemini:
+    api-key: ${GEMINI_API_KEY:}
+    model: ${GEMINI_MODEL:gemini-2.5-flash}
   collection:
     lawd-codes: 41135
     recent-months: 2

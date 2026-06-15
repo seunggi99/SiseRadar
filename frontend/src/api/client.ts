@@ -12,6 +12,7 @@ import type {
   NotificationItem,
   PageResponse,
   PropertyType,
+  RegionInsight,
   RegionStatus,
   ResolvedRegion,
   Trade,
@@ -208,6 +209,20 @@ export const api = {
     ) =>
       request<MapComplexChange>('GET', '/api/map/complex-change', {
         params: { lawdCd, buildingName, propertyType, tradeType, band },
+      }),
+  },
+
+  // ── AI 시장 요약 ──
+  insights: {
+    region: (
+      lawdCd: string,
+      propertyType: PropertyType,
+      tradeType: TradeType,
+      from?: string,
+      to?: string,
+    ) =>
+      request<RegionInsight>('GET', '/api/insights/region', {
+        params: { lawdCd, propertyType, tradeType, from, to },
       }),
   },
 
