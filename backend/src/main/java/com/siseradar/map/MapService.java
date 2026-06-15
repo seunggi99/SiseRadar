@@ -10,6 +10,7 @@ import com.siseradar.repository.MapComplexStatRow;
 import com.siseradar.repository.MapRegionStatRow;
 import com.siseradar.repository.RealEstateTransactionRepository;
 import com.siseradar.repository.ComplexPeriodRow;
+import com.siseradar.repository.MapMarkerRow;
 import com.siseradar.repository.RegionCentroidRepository;
 import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
@@ -75,8 +76,9 @@ public class MapService {
   }
 
   /**
-   * Markers for every region whose centroid falls inside the viewport bbox — the high-zoom,
-   * viewport-driven path. Geocoding is lazy and shares one cap across all visible regions.
+   * Markers for the viewport bbox — the high-zoom, viewport-driven path. Markers are selected by
+   * each complex's OWN coordinate (so they render at any zoom, incl. max zoom-in), while lazy
+   * geocoding of not-yet-cached complexes is triggered for regions overlapping the box.
    */
   public List<MapComplexResponse> complexesInBounds(
       double swLat,
@@ -91,17 +93,57 @@ public class MapService {
     if (!MARKER_TYPES.contains(pt)) {
       return List.of();
     }
-    List<RegionCentroid> regions = centroids.findInBounds(swLat, neLat, swLng, neLng);
+    String fromYm = (from == null || from.isBlank()) ? null : from;
+    String toYm = (to == null || to.isBlank()) ? null : to;
+    String bandFilter = (band == null || band.isBlank()) ? null : band;
+
+    // markers: geocoded complexes whose coordinates are inside the viewport (any zoom)
     List<MapComplexResponse> out = new ArrayList<>();
+    for (MapMarkerRow r :
+        trades.markersInBbox(
+            swLat, neLat, swLng, neLng, pt.name(), tt.name(), fromYm, toYm, bandFilter)) {
+      out.add(
+          new MapComplexResponse(
+              r.getLawdCd(),
+              r.getBuildingName(),
+              r.getLat(),
+              r.getLng(),
+              Math.round(r.getAvgPricePerArea()),
+              Math.round(r.getMedianPricePerArea()),
+              r.getCnt()));
+    }
+
+    // discovery: queue lazy geocoding for not-yet-cached complexes of overlapping regions
     int[] budget = {0};
     int count = 0;
-    for (RegionCentroid r : regions) {
-      if (count++ >= BBOX_REGION_CAP) {
+    for (RegionCentroid rc : centroids.findInBounds(swLat, neLat, swLng, neLng)) {
+      if (count++ >= BBOX_REGION_CAP || budget[0] >= GEOCODE_CAP) {
         break;
       }
-      collectComplexes(r.getLawdCd(), pt, tt, from, to, band, out, budget);
+      triggerGeocoding(rc.getLawdCd(), pt, tt, fromYm, toYm, bandFilter, budget);
     }
     return out;
+  }
+
+  /** Queue background geocoding for a region's not-yet-cached buildings (capped, in-flight dedup). */
+  private void triggerGeocoding(
+      String lawdCd, PropertyType pt, TradeType tt, String from, String to, String band, int[] launched) {
+    Map<String, ComplexGeocode> cache =
+        geocodes.findByLawdCdAndPropertyType(lawdCd, pt).stream()
+            .collect(Collectors.toMap(ComplexGeocode::getBuildingName, g -> g, (a, b) -> a));
+    for (MapComplexStatRow row : trades.mapComplexStats(lawdCd, pt.name(), tt.name(), from, to, band)) {
+      if (launched[0] >= GEOCODE_CAP) {
+        break;
+      }
+      if (cache.containsKey(row.getBuildingName())) {
+        continue; // already SUCCESS/PENDING/FAILED — don't re-queue
+      }
+      String key = MapGeocodeWorker.key(lawdCd, pt, row.getBuildingName());
+      if (worker.claim(key)) {
+        worker.geocode(lawdCd, pt, row.getBuildingName(), row.getUmdNm(), key);
+        launched[0]++;
+      }
+    }
   }
 
   /**

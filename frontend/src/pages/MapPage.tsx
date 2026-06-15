@@ -109,6 +109,9 @@ export function MapPage() {
   const clusterer = useRef<any>(null);
   const overlay = useRef<any>(null);
   const bubbleOverlays = useRef<any[]>([]);
+  // 현재 지도에 올라간 마커 (key = lawdCd|건물명) — 팬마다 전체 재생성하지 않고 incremental diff.
+  const markersByKey = useRef<Map<string, any>>(new Map());
+  const lastFilterKey = useRef<string>('');
   const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState(false);
@@ -211,16 +214,31 @@ export function MapPage() {
     };
   }, [setLawdCd]);
 
-  // 단지 마커: 고줌(showBubbles=false)일 때만. 색은 고정 절대 스케일. 뷰포트가 채우므로 fit 안 함.
+  // 단지 마커: 고줌(showBubbles=false)일 때만. 팬/줌마다 전체 재생성하지 않고 incremental diff —
+  // 화면에 남는 마커는 유지, 나간 것만 제거·새로 들어온 것만 추가 → 깜빡임 없음. 색은 고정 스케일.
   useEffect(() => {
     const kakao = kakaoRef.current;
     if (!ready || !kakao || !clusterer.current || !mapObj.current) return;
+    const store = markersByKey.current;
 
-    clusterer.current.clear();
-    if (showBubbles) return; // 저줌 → 마커 숨김(버블 모드)
+    if (showBubbles) {
+      // 저줌 → 버블 모드: 마커 한 번만 제거
+      if (store.size) {
+        clusterer.current.clear();
+        store.clear();
+      }
+      return;
+    }
 
-    overlay.current?.setMap(null);
-    const markers = markerData.map((c) => {
+    // 유형/거래/평형대가 바뀌면 색·통계가 달라지므로 전체 재생성(팬·줌은 해당 없음)
+    const filterKey = `${propertyType}|${tradeType}|${band ?? ''}`;
+    if (lastFilterKey.current !== filterKey) {
+      clusterer.current.clear();
+      store.clear();
+      lastFilterKey.current = filterKey;
+    }
+
+    const makeMarker = (c: MapComplex) => {
       const marker = new kakao.maps.Marker({
         position: new kakao.maps.LatLng(c.lat, c.lng),
         image: markerImage(kakao, colorForArea(c.avgPricePerArea, tradeType)),
@@ -247,8 +265,30 @@ export function MapPage() {
           });
       });
       return marker;
+    };
+
+    const next = new Map<string, MapComplex>();
+    markerData.forEach((c) => next.set(`${c.lawdCd}|${c.buildingName}`, c));
+
+    // 나간 마커만 제거
+    const toRemove: any[] = [];
+    store.forEach((m, key) => {
+      if (!next.has(key)) {
+        toRemove.push(m);
+        store.delete(key);
+      }
     });
-    clusterer.current.addMarkers(markers);
+    if (toRemove.length) clusterer.current.removeMarkers(toRemove);
+
+    // 새로 들어온 것만 추가 (남는 건 그대로 유지 → 깜빡임 없음)
+    const toAdd: any[] = [];
+    next.forEach((c, key) => {
+      if (store.has(key)) return;
+      const m = makeMarker(c);
+      store.set(key, m);
+      toAdd.push(m);
+    });
+    if (toAdd.length) clusterer.current.addMarkers(toAdd);
   }, [markerData, ready, showBubbles, tradeType, propertyType, band]);
 
   // 지역 버블: 저줌(showBubbles)일 때만. 마커와 같은 절대 색 스케일 공유. 클릭 → 줌인 + 지역 동기화.

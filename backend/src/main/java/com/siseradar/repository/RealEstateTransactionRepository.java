@@ -232,6 +232,47 @@ public interface RealEstateTransactionRepository extends JpaRepository<RealEstat
       @Param("pt") PropertyType propertyType,
       @Param("tt") TradeType tradeType);
 
+  /**
+   * Markers for a viewport bbox: geocoded complexes whose own coordinates fall inside the box
+   * (joined with 전용 단위면적가 stats). Selecting by the building's coordinate — not the region
+   * centroid — means markers render at ANY zoom, including max zoom-in.
+   */
+  @Query(
+      value =
+          """
+          SELECT g.lawd_cd AS lawdCd, t.building_name AS buildingName,
+                 g.lat AS lat, g.lng AS lng,
+                 COUNT(*) AS cnt,
+                 AVG(COALESCE(t.deal_amount, t.deposit) / NULLIF(t.area, 0)) AS avgPricePerArea,
+                 PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY COALESCE(t.deal_amount, t.deposit) / NULLIF(t.area, 0)) AS medianPricePerArea
+          FROM real_estate_transaction t
+          JOIN complex_geocode g
+            ON g.lawd_cd = t.lawd_cd AND g.building_name = t.building_name
+               AND g.property_type = t.property_type
+          WHERE g.status = 'SUCCESS' AND g.lat IS NOT NULL AND g.lng IS NOT NULL
+            AND g.lat BETWEEN :swLat AND :neLat AND g.lng BETWEEN :swLng AND :neLng
+            AND t.property_type = :pt AND t.trade_type = :tt
+            AND (:from IS NULL OR t.deal_ymd >= :from)
+            AND (:to IS NULL OR t.deal_ymd <= :to)
+            AND (:band IS NULL OR
+                 CASE WHEN t.area <= 60 THEN 'SMALL'
+                      WHEN t.area <= 85 THEN 'MID_SMALL'
+                      WHEN t.area <= 135 THEN 'MID_LARGE'
+                      ELSE 'LARGE' END = :band)
+          GROUP BY g.lawd_cd, t.building_name, g.lat, g.lng
+          """,
+      nativeQuery = true)
+  List<MapMarkerRow> markersInBbox(
+      @Param("swLat") double swLat,
+      @Param("neLat") double neLat,
+      @Param("swLng") double swLng,
+      @Param("neLng") double neLng,
+      @Param("pt") String propertyType,
+      @Param("tt") String tradeType,
+      @Param("from") String from,
+      @Param("to") String to,
+      @Param("band") String band);
+
   /** Latest 거래월 for one building — the anchor for its 변동률 windows. */
   @Query(
       "SELECT MAX(t.dealYmd) FROM RealEstateTransaction t "
