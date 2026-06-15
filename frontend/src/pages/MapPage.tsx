@@ -23,6 +23,8 @@ import { isKnownRegion, regionName } from '../lib/regions';
 const REGION_ZOOM = 8;
 // 버블 클릭/검색 점프 시 들어갈 단지 마커 줌.
 const MARKER_ZOOM = 5;
+// 범례 색칩 폭(px) — 경계 라벨("4,000")보다 넓어 라벨이 겹치지 않는다.
+const SWATCH_W = 38;
 
 /** 색 인코딩 모드: 시세(평당가 수준 teal) ↔ 상승률(1년 변동률 diverging). */
 type ColorMode = 'price' | 'change';
@@ -445,33 +447,42 @@ export function MapPage() {
             </div>
           )}
 
-          {/* color legend — 시세(teal 절대 ₩/㎡) ↔ 상승률(diverging %) 전환. 칩은 nowrap 한 줄. */}
+          {/* color legend — 시세(teal 절대 ₩/㎡) ↔ 상승률(diverging %) 전환. 경계 라벨은 칩
+              사이 분기점에 우측정렬해 겹치지 않게. 칩 폭 > 라벨 폭이라 한 줄 유지. */}
           {ready && (
-            <div className="sr-surface absolute left-3 top-3 flex flex-col gap-1.5 px-3 py-2 text-xs" style={{ zIndex: 5 }}>
+            <div className="sr-surface absolute left-3 top-3 flex flex-col gap-1 px-3 py-2 text-xs" style={{ zIndex: 5 }}>
               <span className="sr-muted">{legendCaption}</span>
-              <div className="flex flex-nowrap items-end gap-0">
-                {legendShades.map((s, i) => (
-                  <div key={s} className="flex shrink-0 flex-col items-center" style={{ width: 30 }}>
-                    <span className="h-3 w-full" style={{ background: s }} />
-                    <span className="sr-num sr-muted mt-0.5" style={{ fontSize: 10 }}>
-                      {i < legendBounds.length ? fmtBound(legendBounds[i]) : ''}
-                    </span>
-                  </div>
+              {/* 색 띠 */}
+              <div className="flex flex-nowrap">
+                {legendShades.map((s) => (
+                  <span key={s} className="h-2.5 shrink-0" style={{ width: SWATCH_W, background: s }} />
                 ))}
                 {isChange && (
-                  <div className="flex shrink-0 flex-col items-center" style={{ width: 34 }}>
-                    <span
-                      className="h-3 w-full"
-                      style={{ background: 'var(--sr-surface)', border: '1px dashed var(--sr-border)' }}
-                    />
-                    <span className="sr-muted mt-0.5" style={{ fontSize: 10 }}>
-                      부족
-                    </span>
-                  </div>
+                  <span
+                    className="h-2.5 shrink-0"
+                    style={{ width: SWATCH_W, marginLeft: 6, background: 'var(--sr-surface)', border: '1px dashed var(--sr-border)' }}
+                  />
+                )}
+              </div>
+              {/* 경계값(칩 우측 = 분기점) */}
+              <div className="flex flex-nowrap">
+                {legendShades.map((s, i) => (
+                  <span
+                    key={s}
+                    className="sr-num sr-muted shrink-0 text-right"
+                    style={{ width: SWATCH_W, fontSize: 9, paddingRight: 1 }}
+                  >
+                    {i < legendBounds.length ? fmtBound(legendBounds[i]) : ''}
+                  </span>
+                ))}
+                {isChange && (
+                  <span className="sr-muted shrink-0 text-center" style={{ width: SWATCH_W, marginLeft: 6, fontSize: 9 }}>
+                    부족
+                  </span>
                 )}
               </div>
               {isChange && (
-                <div className="flex justify-between sr-muted" style={{ fontSize: 9, paddingRight: 34 }}>
+                <div className="flex justify-between sr-muted" style={{ fontSize: 9, width: SWATCH_W * legendShades.length }}>
                   <span>하락</span>
                   <span>상승</span>
                 </div>
