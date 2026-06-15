@@ -232,10 +232,17 @@ public interface RealEstateTransactionRepository extends JpaRepository<RealEstat
       @Param("pt") PropertyType propertyType,
       @Param("tt") TradeType tradeType);
 
+  /** Latest 거래월 over ALL regions for a type — the global anchor for the map's 1년 변동률 windows. */
+  @Query(
+      "SELECT MAX(t.dealYmd) FROM RealEstateTransaction t "
+          + "WHERE t.propertyType = :pt AND t.tradeType = :tt")
+  String globalLatestYmd(@Param("pt") PropertyType propertyType, @Param("tt") TradeType tradeType);
+
   /**
    * Markers for a viewport bbox: geocoded complexes whose own coordinates fall inside the box
    * (joined with 전용 단위면적가 stats). Selecting by the building's coordinate — not the region
-   * centroid — means markers render at ANY zoom, including max zoom-in.
+   * centroid — means markers render at ANY zoom, including max zoom-in. Also returns the current /
+   * prior 12-month avg + count (global windows) so the caller can compute each complex's 1년 변동률.
    */
   @Query(
       value =
@@ -244,7 +251,11 @@ public interface RealEstateTransactionRepository extends JpaRepository<RealEstat
                  g.lat AS lat, g.lng AS lng,
                  COUNT(*) AS cnt,
                  AVG(COALESCE(t.deal_amount, t.deposit) / NULLIF(t.area, 0)) AS avgPricePerArea,
-                 PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY COALESCE(t.deal_amount, t.deposit) / NULLIF(t.area, 0)) AS medianPricePerArea
+                 PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY COALESCE(t.deal_amount, t.deposit) / NULLIF(t.area, 0)) AS medianPricePerArea,
+                 AVG(CASE WHEN t.deal_ymd BETWEEN :curFrom AND :curTo THEN COALESCE(t.deal_amount, t.deposit) / NULLIF(t.area, 0) END) AS curAvg,
+                 AVG(CASE WHEN t.deal_ymd BETWEEN :prevFrom AND :prevTo THEN COALESCE(t.deal_amount, t.deposit) / NULLIF(t.area, 0) END) AS prevAvg,
+                 SUM(CASE WHEN t.deal_ymd BETWEEN :curFrom AND :curTo THEN 1 ELSE 0 END) AS curCnt,
+                 SUM(CASE WHEN t.deal_ymd BETWEEN :prevFrom AND :prevTo THEN 1 ELSE 0 END) AS prevCnt
           FROM real_estate_transaction t
           JOIN complex_geocode g
             ON g.lawd_cd = t.lawd_cd AND g.building_name = t.building_name
@@ -271,7 +282,49 @@ public interface RealEstateTransactionRepository extends JpaRepository<RealEstat
       @Param("tt") String tradeType,
       @Param("from") String from,
       @Param("to") String to,
-      @Param("band") String band);
+      @Param("band") String band,
+      @Param("curFrom") String curFrom,
+      @Param("curTo") String curTo,
+      @Param("prevFrom") String prevFrom,
+      @Param("prevTo") String prevTo);
+
+  /**
+   * Per-region 동일단지(same-store) 평균 1년 변동률: for each building present in BOTH the current
+   * and prior 12-month windows, the % change of its 전용 단위면적가, averaged within the region
+   * (구성 편향 통제). Regions with no matched same-store building are absent → bubble shows 데이터
+   * 부족, not 0%.
+   */
+  @Query(
+      value =
+          """
+          SELECT sub.lawd_cd AS lawdCd,
+                 AVG((sub.cur - sub.prev) / sub.prev * 100) AS changePct,
+                 COUNT(*) AS matched
+          FROM (
+            SELECT t.lawd_cd AS lawd_cd, t.building_name AS bn,
+                   AVG(CASE WHEN t.deal_ymd BETWEEN :curFrom AND :curTo THEN COALESCE(t.deal_amount, t.deposit) / NULLIF(t.area, 0) END) AS cur,
+                   AVG(CASE WHEN t.deal_ymd BETWEEN :prevFrom AND :prevTo THEN COALESCE(t.deal_amount, t.deposit) / NULLIF(t.area, 0) END) AS prev
+            FROM real_estate_transaction t
+            WHERE t.property_type = :pt AND t.trade_type = :tt AND t.building_name IS NOT NULL
+              AND (:band IS NULL OR
+                   CASE WHEN t.area <= 60 THEN 'SMALL'
+                        WHEN t.area <= 85 THEN 'MID_SMALL'
+                        WHEN t.area <= 135 THEN 'MID_LARGE'
+                        ELSE 'LARGE' END = :band)
+            GROUP BY t.lawd_cd, t.building_name
+          ) sub
+          WHERE sub.cur IS NOT NULL AND sub.prev IS NOT NULL AND sub.prev <> 0
+          GROUP BY sub.lawd_cd
+          """,
+      nativeQuery = true)
+  List<RegionChangeRow> regionChange(
+      @Param("pt") String propertyType,
+      @Param("tt") String tradeType,
+      @Param("band") String band,
+      @Param("curFrom") String curFrom,
+      @Param("curTo") String curTo,
+      @Param("prevFrom") String prevFrom,
+      @Param("prevTo") String prevTo);
 
   /** Latest 거래월 for one building — the anchor for its 변동률 windows. */
   @Query(

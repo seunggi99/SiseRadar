@@ -22,3 +22,21 @@ export function colorForArea(perArea: number, tradeType: TradeType): string {
 export function scaleThresholds(tradeType: TradeType): number[] {
   return THRESHOLDS[tradeType];
 }
+
+// ── 상승률(1년 변동률) diverging 스케일 ───────────────────────────────────────
+// 하락=파랑(#2F6FED 계열) ← 0 중립 → 상승=빨강(#E5484D 계열). teal 수준과 절대 안 섞음.
+// 경계 ±10%에서 진한 색으로 클램프(극단값도 같은 진하기).
+export const DIVERGING_SHADES = ['#2F6FED', '#9CB8F2', '#D5D8DC', '#F0A6A8', '#E5484D'];
+const CHANGE_THRESHOLDS = [-10, -3, 3, 10]; // 경계 4개 → 색 5개 (가운데 중립)
+
+/** 1년 변동률(%) → diverging 색. null(데이터 부족)은 호출부에서 별도 처리. */
+export function colorForChange(pct: number): string {
+  for (let i = 0; i < CHANGE_THRESHOLDS.length; i++) {
+    if (pct <= CHANGE_THRESHOLDS[i]) return DIVERGING_SHADES[i];
+  }
+  return DIVERGING_SHADES[DIVERGING_SHADES.length - 1];
+}
+
+export function changeThresholds(): number[] {
+  return CHANGE_THRESHOLDS;
+}

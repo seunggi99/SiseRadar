@@ -83,6 +83,8 @@ export interface MapComplex {
   avgPricePerArea: number;
   medianPricePerArea: number;
   count: number;
+  /** 1년 평당가 변동률 (%) — 상승률 색 모드용. null이면 데이터 부족. */
+  changePct: number | null;
 }
 
 /** 단일 단지 평당가(전용) 변동률 — 현재 12개월 vs 직전 12개월. hasData=false면 "변동 데이터 부족". */
@@ -115,6 +117,8 @@ export interface MapRegion {
   medianPricePerArea: number;
   /** 전체 거래량 (대시보드와 동일). */
   count: number;
+  /** 동일단지 평균 1년 변동률 (%) — 상승률 색 모드용. null이면 데이터 부족. */
+  changePct: number | null;
 }
 
 export interface ComplexChange {

@@ -15,4 +15,13 @@ public interface MapMarkerRow {
   double getAvgPricePerArea();
 
   double getMedianPricePerArea();
+
+  // current / prior 12-month windows — for the 1년 변동률 color mode (null when no transactions)
+  Double getCurAvg();
+
+  Double getPrevAvg();
+
+  long getCurCnt();
+
+  long getPrevCnt();
 }

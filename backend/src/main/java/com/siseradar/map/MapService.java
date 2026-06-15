@@ -12,10 +12,12 @@ import com.siseradar.repository.RealEstateTransactionRepository;
 import com.siseradar.repository.ComplexPeriodRow;
 import com.siseradar.repository.MapMarkerRow;
 import com.siseradar.repository.RegionCentroidRepository;
+import com.siseradar.repository.RegionChangeRow;
 import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -96,12 +98,14 @@ public class MapService {
     String fromYm = (from == null || from.isBlank()) ? null : from;
     String toYm = (to == null || to.isBlank()) ? null : to;
     String bandFilter = (band == null || band.isBlank()) ? null : band;
+    Windows w = changeWindows(pt, tt);
 
     // markers: geocoded complexes whose coordinates are inside the viewport (any zoom)
     List<MapComplexResponse> out = new ArrayList<>();
     for (MapMarkerRow r :
         trades.markersInBbox(
-            swLat, neLat, swLng, neLng, pt.name(), tt.name(), fromYm, toYm, bandFilter)) {
+            swLat, neLat, swLng, neLng, pt.name(), tt.name(), fromYm, toYm, bandFilter,
+            w.curFrom(), w.curTo(), w.prevFrom(), w.prevTo())) {
       out.add(
           new MapComplexResponse(
               r.getLawdCd(),
@@ -110,7 +114,8 @@ public class MapService {
               r.getLng(),
               Math.round(r.getAvgPricePerArea()),
               Math.round(r.getMedianPricePerArea()),
-              r.getCnt()));
+              r.getCnt(),
+              markerChangePct(r)));
     }
 
     // discovery: queue lazy geocoding for not-yet-cached complexes of overlapping regions
@@ -183,7 +188,8 @@ public class MapService {
                   g.getLng(),
                   Math.round(row.getAvgPricePerArea()),
                   Math.round(row.getMedianPricePerArea()),
-                  row.getCnt()));
+                  row.getCnt(),
+                  null)); // legacy per-region path doesn't compute 변동률
         }
         // PENDING/FAILED → skip
         continue;
@@ -214,6 +220,17 @@ public class MapService {
         centroids.findAllById(lawdCds).stream()
             .collect(Collectors.toMap(RegionCentroid::getLawdCd, c -> c, (a, b) -> a));
 
+    // 동일단지(same-store) 1년 변동률 per region — for the 상승률 색 모드 (data 부족 region → absent)
+    Windows w = changeWindows(pt, tt);
+    Map<String, Double> changeByRegion = new HashMap<>();
+    for (RegionChangeRow rc :
+        trades.regionChange(
+            pt.name(), tt.name(), bandFilter, w.curFrom(), w.curTo(), w.prevFrom(), w.prevTo())) {
+      if (rc.getChangePct() != null) {
+        changeByRegion.put(rc.getLawdCd(), Math.round(rc.getChangePct() * 10) / 10.0);
+      }
+    }
+
     List<MapRegionResponse> out = new ArrayList<>();
     int launched = 0;
     for (MapRegionStatRow s : stats) {
@@ -227,7 +244,8 @@ public class MapService {
                   c.getLng(),
                   Math.round(s.getAvgPricePerArea()),
                   Math.round(s.getMedianPricePerArea()),
-                  s.getCnt()));
+                  s.getCnt(),
+                  changeByRegion.get(s.getLawdCd())));
         }
         // FAILED → no bubble (don't retry)
         continue;
@@ -242,28 +260,24 @@ public class MapService {
   }
 
   /**
-   * One building's 평당가(전용) 변동률: current 12 months vs the preceding 12 months, anchored on
-   * the building's latest 거래월, optionally within one 평형대. Both windows must have transactions
-   * — otherwise {@code hasData=false} ("변동 데이터 부족"), never a misleading 0%.
+   * One building's 평당가(전용) 변동률: current 12 months vs the preceding 12 months, on the map's
+   * global anchor (so it matches the marker's color), optionally within one 평형대. Both windows
+   * must have transactions — otherwise {@code hasData=false} ("변동 데이터 부족"), never a misleading 0%.
    */
   public MapComplexChangeResponse complexChange(
       String lawdCd, PropertyType pt, TradeType tt, String buildingName, String band) {
-    String anchor = trades.complexLatestYmd(lawdCd, pt, tt, buildingName);
-    if (anchor == null) {
-      return insufficient(null, null, null, null);
+    Windows w = changeWindows(pt, tt);
+    if (w.curTo() == null) {
+      return new MapComplexChangeResponse(false, null, 0, 0, null, null, null, null);
     }
-    YearMonth a = YearMonth.parse(anchor, YM);
-    String curFrom = a.minusMonths(CHANGE_MONTHS - 1L).format(YM);
-    String curTo = anchor;
-    String prevFrom = a.minusMonths(2L * CHANGE_MONTHS - 1).format(YM);
-    String prevTo = a.minusMonths(CHANGE_MONTHS).format(YM);
     String bandFilter = (band == null || band.isBlank()) ? null : band;
 
     ComplexPeriodRow cur =
-        trades.complexPeriodStat(lawdCd, pt.name(), tt.name(), buildingName, curFrom, curTo, bandFilter);
+        trades.complexPeriodStat(
+            lawdCd, pt.name(), tt.name(), buildingName, w.curFrom(), w.curTo(), bandFilter);
     ComplexPeriodRow prev =
         trades.complexPeriodStat(
-            lawdCd, pt.name(), tt.name(), buildingName, prevFrom, prevTo, bandFilter);
+            lawdCd, pt.name(), tt.name(), buildingName, w.prevFrom(), w.prevTo(), bandFilter);
 
     boolean hasData =
         cur.getCnt() > 0
@@ -273,7 +287,7 @@ public class MapService {
             && prev.getAvgPricePerArea() != 0;
     if (!hasData) {
       return new MapComplexChangeResponse(
-          false, null, cur.getCnt(), prev.getCnt(), curFrom, curTo, prevFrom, prevTo);
+          false, null, cur.getCnt(), prev.getCnt(), w.curFrom(), w.curTo(), w.prevFrom(), w.prevTo());
     }
     double pct =
         (cur.getAvgPricePerArea() - prev.getAvgPricePerArea()) / prev.getAvgPricePerArea() * 100.0;
@@ -282,14 +296,37 @@ public class MapService {
         Math.round(pct * 10) / 10.0,
         cur.getCnt(),
         prev.getCnt(),
-        curFrom,
-        curTo,
-        prevFrom,
-        prevTo);
+        w.curFrom(),
+        w.curTo(),
+        w.prevFrom(),
+        w.prevTo());
   }
 
-  private static MapComplexChangeResponse insufficient(
-      String cf, String ct, String pf, String pt) {
-    return new MapComplexChangeResponse(false, null, 0, 0, cf, ct, pf, pt);
+  /** Current / prior 12-month windows for the 변동률, on the dataset's latest month for this type. */
+  private record Windows(String curFrom, String curTo, String prevFrom, String prevTo) {}
+
+  private Windows changeWindows(PropertyType pt, TradeType tt) {
+    String anchor = trades.globalLatestYmd(pt, tt);
+    if (anchor == null) {
+      return new Windows(null, null, null, null); // no data → BETWEEN never matches
+    }
+    YearMonth a = YearMonth.parse(anchor, YM);
+    return new Windows(
+        a.minusMonths(CHANGE_MONTHS - 1L).format(YM),
+        anchor,
+        a.minusMonths(2L * CHANGE_MONTHS - 1).format(YM),
+        a.minusMonths(CHANGE_MONTHS).format(YM));
+  }
+
+  /** 마커의 1년 변동률(%) — 두 12개월 윈도 모두 거래가 있을 때만, 아니면 null(데이터 부족). */
+  private static Double markerChangePct(MapMarkerRow r) {
+    if (r.getCurCnt() > 0
+        && r.getPrevCnt() > 0
+        && r.getCurAvg() != null
+        && r.getPrevAvg() != null
+        && r.getPrevAvg() != 0) {
+      return Math.round((r.getCurAvg() - r.getPrevAvg()) / r.getPrevAvg() * 1000) / 10.0;
+    }
+    return null;
   }
 }

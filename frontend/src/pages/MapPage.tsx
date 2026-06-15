@@ -1,14 +1,21 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client';
 import { useMapComplexesInBounds, useMapRegions } from '../api/hooks';
-import type { Bounds, MapComplex, MapComplexChange, MapRegion } from '../api/types';
+import type { Bounds, MapComplex, MapComplexChange, MapRegion, TradeType } from '../api/types';
 import { Header } from '../components/Header';
 import { PropertyTradeSelector } from '../components/PropertyTradeSelector';
 import { RadarSpinner } from '../components/RadarSpinner';
 import { RegionSearch } from '../components/RegionSearch';
 import { useFilters } from '../lib/filters';
 import { isInKorea, loadKakao, restrictToKorea } from '../lib/kakaoMap';
-import { colorForArea, scaleThresholds, TEAL_SHADES } from '../lib/priceScale';
+import {
+  changeThresholds,
+  colorForArea,
+  colorForChange,
+  DIVERGING_SHADES,
+  scaleThresholds,
+  TEAL_SHADES,
+} from '../lib/priceScale';
 import { propertyMeta } from '../lib/propertyTypes';
 import { isKnownRegion, regionName } from '../lib/regions';
 
@@ -17,6 +24,9 @@ const REGION_ZOOM = 8;
 // 버블 클릭/검색 점프 시 들어갈 단지 마커 줌.
 const MARKER_ZOOM = 5;
 
+/** 색 인코딩 모드: 시세(평당가 수준 teal) ↔ 상승률(1년 변동률 diverging). */
+type ColorMode = 'price' | 'change';
+
 function markerImage(kakao: any, color: string) {
   const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='18' height='18'><circle cx='9' cy='9' r='6.5' fill='${color}' stroke='white' stroke-opacity='0.9' stroke-width='1.5'/></svg>`;
   return new kakao.maps.MarkerImage(
@@ -24,6 +34,22 @@ function markerImage(kakao: any, color: string) {
     new kakao.maps.Size(18, 18),
     { offset: new kakao.maps.Point(9, 9) },
   );
+}
+
+/** 변동 데이터 부족 마커 — 색칠(0%로 오해) 대신 점선 빈 원으로 명확히 구분. */
+function markerImageMuted(kakao: any) {
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='18' height='18'><circle cx='9' cy='9' r='6' fill='white' fill-opacity='0.5' stroke='#9aa0a6' stroke-width='1.4' stroke-dasharray='2 1.6'/></svg>`;
+  return new kakao.maps.MarkerImage(
+    'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg),
+    new kakao.maps.Size(18, 18),
+    { offset: new kakao.maps.Point(9, 9) },
+  );
+}
+
+/** 마커 색: 시세=teal 절대 스케일, 상승률=diverging. null이면 데이터 부족(별도 렌더). */
+function markerColorFor(c: MapComplex, mode: ColorMode, tradeType: TradeType): string | null {
+  if (mode === 'change') return c.changePct == null ? null : colorForChange(c.changePct);
+  return colorForArea(c.avgPricePerArea, tradeType);
 }
 
 function escapeHtml(s: string): string {
@@ -69,13 +95,22 @@ function bubbleDiameter(count: number): number {
   return Math.max(28, Math.min(66, Math.round(24 + Math.sqrt(count) * 0.9)));
 }
 
-function bubbleElement(r: MapRegion, color: string, onClick: () => void): HTMLElement {
+// color=null → 변동 데이터 부족(상승률 모드): 색칠 대신 점선 빈 버블로 0%와 구분.
+function bubbleElement(r: MapRegion, color: string | null, onClick: () => void): HTMLElement {
   const d = bubbleDiameter(r.count);
+  const muted = color == null;
+  const bg = muted ? 'var(--sr-surface)' : color;
+  const border = muted ? '1.5px dashed var(--sr-border)' : '1.5px solid rgba(255,255,255,0.85)';
+  const textColor = muted ? 'var(--sr-text-muted)' : '#06241f';
   const el = document.createElement('div');
-  el.style.cssText = `display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1;width:${d}px;height:${d}px;border-radius:50%;background:${color};color:#06241f;text-align:center;border:1.5px solid rgba(255,255,255,0.85);box-shadow:0 2px 8px rgba(0,0,0,.25);cursor:pointer;font-variant-numeric:tabular-nums;`;
+  el.style.cssText = `display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1;width:${d}px;height:${d}px;border-radius:50%;background:${bg};color:${textColor};text-align:center;border:${border};box-shadow:0 2px 8px rgba(0,0,0,.25);cursor:pointer;font-variant-numeric:tabular-nums;`;
   // 라벨 단위를 명시: "거래 / 2.9k" — 지역 버블도 단지 클러스터도 '거래 건수'로 통일.
   el.innerHTML = `<span style="font-size:8px;opacity:.7;margin-bottom:1px">거래</span><span style="font-size:11px;font-weight:700">${compact(r.count)}</span>`;
-  el.title = `${regionName(r.lawdCd)} · 평당 ${pyeong(r.avgPricePerArea)}만 · 거래 ${r.count.toLocaleString('ko-KR')}건`;
+  const chg =
+    r.changePct == null
+      ? '변동 데이터 부족'
+      : `1년 ${r.changePct > 0 ? '+' : ''}${r.changePct.toFixed(1)}%`;
+  el.title = `${regionName(r.lawdCd)} · 평당 ${pyeong(r.avgPricePerArea)}만 · 거래 ${r.count.toLocaleString('ko-KR')}건 · ${chg}`;
   el.addEventListener('click', (e) => {
     e.stopPropagation();
     onClick();
@@ -117,6 +152,7 @@ export function MapPage() {
   const [error, setError] = useState(false);
   const [level, setLevel] = useState(6);
   const [bounds, setBounds] = useState<Bounds | null>(null);
+  const [colorMode, setColorMode] = useState<ColorMode>('price');
 
   const showBubbles = level >= REGION_ZOOM;
   const hasMarkers = propertyMeta(propertyType).hasRanking; // 건물명 유형만 마커
@@ -230,8 +266,8 @@ export function MapPage() {
       return;
     }
 
-    // 유형/거래/평형대가 바뀌면 색·통계가 달라지므로 전체 재생성(팬·줌은 해당 없음)
-    const filterKey = `${propertyType}|${tradeType}|${band ?? ''}`;
+    // 유형/거래/평형대/색모드가 바뀌면 색이 달라지므로 전체 재생성(팬·줌은 해당 없음)
+    const filterKey = `${propertyType}|${tradeType}|${band ?? ''}|${colorMode}`;
     if (lastFilterKey.current !== filterKey) {
       clusterer.current.clear();
       store.clear();
@@ -239,9 +275,10 @@ export function MapPage() {
     }
 
     const makeMarker = (c: MapComplex) => {
+      const color = markerColorFor(c, colorMode, tradeType);
       const marker = new kakao.maps.Marker({
         position: new kakao.maps.LatLng(c.lat, c.lng),
-        image: markerImage(kakao, colorForArea(c.avgPricePerArea, tradeType)),
+        image: color == null ? markerImageMuted(kakao) : markerImage(kakao, color),
         title: c.buildingName,
       });
       (marker as any).txCount = c.count; // 클러스터 거래합 계산용
@@ -289,7 +326,7 @@ export function MapPage() {
       toAdd.push(m);
     });
     if (toAdd.length) clusterer.current.addMarkers(toAdd);
-  }, [markerData, ready, showBubbles, tradeType, propertyType, band]);
+  }, [markerData, ready, showBubbles, tradeType, propertyType, band, colorMode]);
 
   // 지역 버블: 저줌(showBubbles)일 때만. 마커와 같은 절대 색 스케일 공유. 클릭 → 줌인 + 지역 동기화.
   useEffect(() => {
@@ -302,7 +339,13 @@ export function MapPage() {
 
     overlay.current?.setMap(null);
     bubbleOverlays.current = regionData.map((r) => {
-      const el = bubbleElement(r, colorForArea(r.avgPricePerArea, tradeType), () => {
+      const color =
+        colorMode === 'change'
+          ? r.changePct == null
+            ? null
+            : colorForChange(r.changePct)
+          : colorForArea(r.avgPricePerArea, tradeType);
+      const el = bubbleElement(r, color, () => {
         setLawdCd(r.lawdCd); // 대시보드 선택 지역 동기화
         mapObj.current.setCenter(new kakao.maps.LatLng(r.lat, r.lng));
         mapObj.current.setLevel(MARKER_ZOOM); // 줌인 → 단지 마커로 전환
@@ -317,7 +360,7 @@ export function MapPage() {
       ov.setMap(mapObj.current);
       return ov;
     });
-  }, [regionData, ready, showBubbles, tradeType, setLawdCd]);
+  }, [regionData, ready, showBubbles, tradeType, setLawdCd, colorMode]);
 
   // 검색 점프(보조): 지역 선택 + 좌표를 알면 그 지역으로 패닝·줌인.
   const onJump = (jumpLawdCd: string) => {
@@ -334,6 +377,21 @@ export function MapPage() {
   const unitLabel = tradeType === 'RENT' ? '보증금 ㎡당' : '평당가(전용)';
   const markerTxSum = markerData.reduce((s, c) => s + c.count, 0);
 
+  // 범례: 시세(teal·₩구간) ↔ 상승률(diverging·% 구간) 전환
+  const isChange = colorMode === 'change';
+  const legendShades = isChange ? DIVERGING_SHADES : TEAL_SHADES;
+  const legendBounds = isChange ? changeThresholds() : thresholds;
+  const fmtBound = (v: number) => (isChange ? `${v > 0 ? '+' : ''}${v}%` : v.toLocaleString('ko-KR'));
+  const legendCaption = isChange
+    ? showBubbles
+      ? '1년 변동률 · 동일단지 기준'
+      : '1년 변동률 · 지오코딩된 단지'
+    : `${unitLabel} · 만원/㎡ ${
+        showBubbles
+          ? `· ${regionData.length}지역`
+          : `· 거래 ${markerTxSum.toLocaleString('ko-KR')}건 (지오코딩된 단지 기준)`
+      }`;
+
   return (
     <div className="min-h-screen">
       <Header />
@@ -344,6 +402,24 @@ export function MapPage() {
             <h1 className="text-xl font-medium tracking-tight">{regionName(lawdCd)}</h1>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            {/* 색 인코딩 모드: 시세(teal) ↔ 상승률(빨강/파랑) — 버블·마커 모두 적용 */}
+            <div className="inline-flex overflow-hidden rounded-md" style={{ border: '0.5px solid var(--sr-border)' }}>
+              {(['price', 'change'] as ColorMode[]).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setColorMode(m)}
+                  className="px-2.5 py-1.5 text-xs transition-colors"
+                  style={{
+                    background: colorMode === m ? 'var(--sr-accent)' : 'transparent',
+                    color: colorMode === m ? '#06241f' : 'var(--sr-text-muted)',
+                    fontWeight: colorMode === m ? 600 : 400,
+                  }}
+                >
+                  {m === 'price' ? '시세' : '상승률'}
+                </button>
+              ))}
+            </div>
             <PropertyTradeSelector
               propertyType={propertyType}
               tradeType={tradeType}
@@ -369,25 +445,37 @@ export function MapPage() {
             </div>
           )}
 
-          {/* color legend — 마커·버블 공유 고정 절대 스케일 (₩/㎡ 구간) */}
+          {/* color legend — 시세(teal 절대 ₩/㎡) ↔ 상승률(diverging %) 전환. 칩은 nowrap 한 줄. */}
           {ready && (
             <div className="sr-surface absolute left-3 top-3 flex flex-col gap-1.5 px-3 py-2 text-xs" style={{ zIndex: 5 }}>
-              <span className="sr-muted">
-                {unitLabel} · 만원/㎡{' '}
-                {showBubbles
-                  ? `· ${regionData.length}지역`
-                  : `· 거래 ${markerTxSum.toLocaleString('ko-KR')}건 (지오코딩된 단지 기준)`}
-              </span>
-              <div className="flex items-end gap-0">
-                {TEAL_SHADES.map((s, i) => (
-                  <div key={s} className="flex flex-col items-center" style={{ width: 34 }}>
+              <span className="sr-muted">{legendCaption}</span>
+              <div className="flex flex-nowrap items-end gap-0">
+                {legendShades.map((s, i) => (
+                  <div key={s} className="flex shrink-0 flex-col items-center" style={{ width: 30 }}>
                     <span className="h-3 w-full" style={{ background: s }} />
                     <span className="sr-num sr-muted mt-0.5" style={{ fontSize: 10 }}>
-                      {i < thresholds.length ? thresholds[i].toLocaleString('ko-KR') : ''}
+                      {i < legendBounds.length ? fmtBound(legendBounds[i]) : ''}
                     </span>
                   </div>
                 ))}
+                {isChange && (
+                  <div className="flex shrink-0 flex-col items-center" style={{ width: 34 }}>
+                    <span
+                      className="h-3 w-full"
+                      style={{ background: 'var(--sr-surface)', border: '1px dashed var(--sr-border)' }}
+                    />
+                    <span className="sr-muted mt-0.5" style={{ fontSize: 10 }}>
+                      부족
+                    </span>
+                  </div>
+                )}
               </div>
+              {isChange && (
+                <div className="flex justify-between sr-muted" style={{ fontSize: 9, paddingRight: 34 }}>
+                  <span>하락</span>
+                  <span>상승</span>
+                </div>
+              )}
             </div>
           )}
 
