@@ -42,7 +42,8 @@ public class SecurityConfig {
                         "/api/trades/**",
                         "/api/stats/**",
                         "/api/map/**",
-                        "/api/insights/**")
+                        "/api/insights/**",
+                        "/api/diag/**")
                     .permitAll()
                     // region status + on-demand collect are public (dashboard has no login)
                     .requestMatchers("/api/regions/**")
