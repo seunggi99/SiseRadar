@@ -34,7 +34,12 @@ public final class RtmsOperations {
           Map.entry(new TypePair(PropertyType.INDUSTRIAL, TradeType.SALE), path("InduTrade")),
           Map.entry(new TypePair(PropertyType.PRESALE_RIGHT, TradeType.SALE), path("SilvTrade")));
 
-  /** Combinations collected by the scheduler / on-demand backfill (APT first → status flips early). */
+  /**
+   * Combinations collected by the scheduler / on-demand backfill (APT first → status flips early).
+   * 주거 3종(아파트·오피스텔·연립다세대) 매매+전월세만 — 단독다가구는 건물명이 없어 동일단지·
+   * 지도 마커·랭킹에 못 쓰고, 상업/토지/산업/분양권은 활용도 대비 용량·수집비용이 커 제외.
+   * (OPS 매핑 표에는 남겨두어 필요 시 다시 켤 수 있다.)
+   */
   public static final List<TypePair> ENABLED =
       List.of(
           new TypePair(PropertyType.APT, TradeType.SALE),
@@ -42,13 +47,7 @@ public final class RtmsOperations {
           new TypePair(PropertyType.OFFICETEL, TradeType.SALE),
           new TypePair(PropertyType.OFFICETEL, TradeType.RENT),
           new TypePair(PropertyType.ROW_HOUSE, TradeType.SALE),
-          new TypePair(PropertyType.ROW_HOUSE, TradeType.RENT),
-          new TypePair(PropertyType.DETACHED, TradeType.SALE),
-          new TypePair(PropertyType.DETACHED, TradeType.RENT),
-          new TypePair(PropertyType.COMMERCIAL, TradeType.SALE),
-          new TypePair(PropertyType.LAND, TradeType.SALE),
-          new TypePair(PropertyType.INDUSTRIAL, TradeType.SALE),
-          new TypePair(PropertyType.PRESALE_RIGHT, TradeType.SALE));
+          new TypePair(PropertyType.ROW_HOUSE, TradeType.RENT));
 
   public static String operationPath(PropertyType propertyType, TradeType tradeType) {
     String op = OPS.get(new TypePair(propertyType, tradeType));
