@@ -25,6 +25,9 @@ const REGION_ZOOM = 8;
 const MARKER_ZOOM = 5;
 // 이 레벨 이하(많이 확대)면 값 라벨 핀, 초과면 또렷한 점.
 const LABEL_ZOOM = 3;
+// 이 레벨 이상에서만 클러스터러 사용(=MarkerClusterer minLevel). 미만은 개별 마커를
+// 지도에 직접 올려 팬 시 클러스터러 전체 redraw로 인한 깜빡임을 없앤다.
+const CLUSTER_MIN = 5;
 // 범례 색칩 폭(px) — 경계 라벨("4,000")보다 넓어 라벨이 겹치지 않는다.
 const SWATCH_W = 38;
 
@@ -203,6 +206,7 @@ export function MapPage() {
 
   const showBubbles = level >= REGION_ZOOM;
   const labelMode = !showBubbles && level <= LABEL_ZOOM; // 많이 확대 → 값 라벨 핀
+  const clustered = !showBubbles && level >= CLUSTER_MIN; // 5~7: 클러스터러 / 1~4: 직접
   const hasMarkers = propertyMeta(propertyType).hasRanking; // 건물명 유형만 마커
 
   const complexes = useMapComplexesInBounds(
@@ -236,7 +240,7 @@ export function MapPage() {
         clusterer.current = new kakao.maps.MarkerClusterer({
           map,
           averageCenter: true,
-          minLevel: 5,
+          minLevel: CLUSTER_MIN,
           styles: [
             {
               width: '38px',
@@ -298,27 +302,31 @@ export function MapPage() {
     };
   }, [setLawdCd]);
 
-  // 단지 마커: 고줌(showBubbles=false)일 때만. 팬/줌마다 전체 재생성하지 않고 incremental diff —
-  // 화면에 남는 마커는 유지, 나간 것만 제거·새로 들어온 것만 추가 → 깜빡임 없음. 색은 고정 스케일.
+  // 단지 마커: 안정 키(lawdCd|건물명) 기반 incremental diff. 같은 tier에서 팬하면 화면에
+  // 남는 마커는 건드리지 않고(깜빡임 없음), 새 키만 추가·나간 키만 제거.
+  // 클러스터 구간(level≥5)만 클러스터러 사용, 그 미만은 지도에 직접 올려 redraw 깜빡임 제거.
   useEffect(() => {
     const kakao = kakaoRef.current;
     if (!ready || !kakao || !clusterer.current || !mapObj.current) return;
     const store = markersByKey.current;
 
+    // 보관 중인 모든 마커를 컨테이너(클러스터러/지도)에서 떼고 비운다 — tier 전환·버블 진입 시만.
+    const removeAll = () => {
+      store.forEach((m) => m.setMap(null)); // 지도 직접 올린 것
+      clusterer.current.clear(); // 클러스터러 보유분
+      store.clear();
+    };
+
     if (showBubbles) {
-      // 저줌 → 버블 모드: 마커 한 번만 제거
-      if (store.size) {
-        clusterer.current.clear();
-        store.clear();
-      }
+      if (store.size) removeAll();
       return;
     }
 
-    // 유형/거래/평형대/색모드/줌tier(점↔핀)가 바뀌면 마커 모양·색이 달라지므로 전체 재생성
-    const filterKey = `${propertyType}|${tradeType}|${band ?? ''}|${colorMode}|${labelMode ? 'pill' : 'dot'}`;
+    // 표현이 통째로 바뀌는 변경(유형/거래/평형대/색모드/핀↔점/클러스터↔직접)만 전체 재생성.
+    // '같은 tier 안에서의 팬'은 filterKey가 그대로라 순수 diff만 돈다.
+    const filterKey = `${propertyType}|${tradeType}|${band ?? ''}|${colorMode}|${labelMode ? 'pill' : 'dot'}|${clustered ? 'cl' : 'dir'}`;
     if (lastFilterKey.current !== filterKey) {
-      clusterer.current.clear();
-      store.clear();
+      removeAll();
       lastFilterKey.current = filterKey;
     }
 
@@ -361,26 +369,33 @@ export function MapPage() {
     const next = new Map<string, MapComplex>();
     markerData.forEach((c) => next.set(`${c.lawdCd}|${c.buildingName}`, c));
 
-    // 나간 마커만 제거
-    const toRemove: any[] = [];
+    // 델타만 계산: 나간 키 제거, 새 키 추가. 남는 키의 마커 객체는 그대로 둔다.
+    const removed: any[] = [];
     store.forEach((m, key) => {
       if (!next.has(key)) {
-        toRemove.push(m);
+        removed.push(m);
         store.delete(key);
       }
     });
-    if (toRemove.length) clusterer.current.removeMarkers(toRemove);
-
-    // 새로 들어온 것만 추가 (남는 건 그대로 유지 → 깜빡임 없음)
-    const toAdd: any[] = [];
+    const added: any[] = [];
     next.forEach((c, key) => {
       if (store.has(key)) return;
       const m = makeMarker(c);
       store.set(key, m);
-      toAdd.push(m);
+      added.push(m);
     });
-    if (toAdd.length) clusterer.current.addMarkers(toAdd);
-  }, [markerData, ready, showBubbles, labelMode, tradeType, propertyType, band, colorMode]);
+
+    if (clustered) {
+      // 클러스터러: 델타만 nodraw로 반영 후 1회만 redraw (clear+전체 재추가 금지)
+      if (removed.length) clusterer.current.removeMarkers(removed, true);
+      if (added.length) clusterer.current.addMarkers(added, true);
+      if (removed.length || added.length) clusterer.current.redraw();
+    } else {
+      // 개별 마커: 지도에 직접 — 남는 마커는 손대지 않으므로 팬해도 깜빡이지 않음
+      removed.forEach((m) => m.setMap(null));
+      added.forEach((m) => m.setMap(mapObj.current));
+    }
+  }, [markerData, ready, showBubbles, labelMode, clustered, tradeType, propertyType, band, colorMode]);
 
   // 지역 버블: 저줌(showBubbles)일 때만. 마커와 같은 절대 색 스케일 공유. 클릭 → 줌인 + 지역 동기화.
   useEffect(() => {
