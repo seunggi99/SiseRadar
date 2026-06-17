@@ -5,7 +5,6 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.Lob;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import java.time.Instant;
@@ -41,13 +40,12 @@ public class RegionInsight {
   @Column(name = "period", nullable = false, length = 20)
   private String period;
 
-  @Lob
-  @Column(name = "summary", nullable = false)
+  // text 매핑(Postgres) — @Lob은 oid(LOB)로 매핑돼 auto-commit SELECT에서 깨짐.
+  @Column(name = "summary", nullable = false, columnDefinition = "text")
   private String summary;
 
   /** JSON of the numbers the summary was grounded on — to detect data changes + show as basis. */
-  @Lob
-  @Column(name = "basis_json", nullable = false)
+  @Column(name = "basis_json", nullable = false, columnDefinition = "text")
   private String basisJson;
 
   /** "ai" (LLM) or "fallback" (template) — so we don't cache a fallback as if it were AI. */

@@ -28,6 +28,8 @@ import org.springframework.stereotype.Service;
 @Service
 public class InsightService {
 
+  private static final org.slf4j.Logger log =
+      org.slf4j.LoggerFactory.getLogger(InsightService.class);
   private static final double PYEONG = 3.3058; // ㎡ → 평
   private static final Duration TTL = Duration.ofHours(24);
 
@@ -70,20 +72,27 @@ public class InsightService {
 
     String period = basis.periodFrom() + "-" + basis.periodTo();
     String basisJson = toJson(basis);
-    Optional<RegionInsight> cached =
-        repo.findByLawdCdAndPropertyTypeAndTradeTypeAndPeriod(
-            lawdCd, pt.name(), tt.name(), period);
 
-    // 캐시 히트: 같은 수치 + TTL 이내 + 직전이 AI 생성이면 그대로 (매 요청 LLM 호출 금지)
-    if (cached.isPresent()) {
-      RegionInsight ri = cached.get();
-      boolean fresh =
-          ri.getBasisJson().equals(basisJson)
-              && ri.getGeneratedAt().isAfter(Instant.now().minus(TTL))
-              && "ai".equals(ri.getSource());
-      if (fresh) {
-        return new RegionInsightResponse(ri.getSummary(), ri.getGeneratedAt(), ri.getSource(), basis);
+    // 캐시 조회는 방어적으로 — 읽기 실패(예: 구 oid 컬럼)여도 500 대신 재계산으로 graceful.
+    Optional<RegionInsight> cached = Optional.empty();
+    try {
+      cached =
+          repo.findByLawdCdAndPropertyTypeAndTradeTypeAndPeriod(lawdCd, pt.name(), tt.name(), period);
+      // 캐시 히트: 같은 수치 + TTL 이내 + 직전이 AI 생성이면 그대로 (매 요청 LLM 호출 금지)
+      if (cached.isPresent()) {
+        RegionInsight ri = cached.get();
+        boolean fresh =
+            ri.getBasisJson().equals(basisJson)
+                && ri.getGeneratedAt().isAfter(Instant.now().minus(TTL))
+                && "ai".equals(ri.getSource());
+        if (fresh) {
+          return new RegionInsightResponse(
+              ri.getSummary(), ri.getGeneratedAt(), ri.getSource(), basis);
+        }
       }
+    } catch (RuntimeException e) {
+      log.warn("region_insight 캐시 조회 실패 — 재계산으로 진행: {}", e.toString());
+      cached = Optional.empty();
     }
 
     // (재)생성: LLM 우선, 실패/쿼터 소진 시 템플릿 폴백
@@ -91,16 +100,22 @@ public class InsightService {
     String summary = generated != null ? generated : templateSummary(basis);
     String source = generated != null ? "ai" : "fallback";
 
-    RegionInsight ri =
-        cached.orElseGet(
-            () ->
-                new RegionInsight(
-                    lawdCd, pt.name(), tt.name(), period, summary, basisJson, source));
-    if (cached.isPresent()) {
-      ri.refresh(summary, basisJson, source);
+    // 캐시 저장도 방어적으로 — 저장 실패해도 계산된 요약은 정상 반환.
+    try {
+      RegionInsight ri =
+          cached.orElseGet(
+              () ->
+                  new RegionInsight(
+                      lawdCd, pt.name(), tt.name(), period, summary, basisJson, source));
+      if (cached.isPresent()) {
+        ri.refresh(summary, basisJson, source);
+      }
+      repo.save(ri);
+      return new RegionInsightResponse(ri.getSummary(), ri.getGeneratedAt(), ri.getSource(), basis);
+    } catch (RuntimeException e) {
+      log.warn("region_insight 캐시 저장 실패 — 계산 결과만 반환: {}", e.toString());
+      return new RegionInsightResponse(summary, Instant.now(), source, basis);
     }
-    repo.save(ri);
-    return new RegionInsightResponse(ri.getSummary(), ri.getGeneratedAt(), ri.getSource(), basis);
   }
 
   // ── basis (그라운딩 수치) ────────────────────────────────────────────────────
