@@ -18,6 +18,8 @@ import java.util.List;
 public record MonthlyStatsResponse(
     String ym,
     long count,
+    /** 버킷에 데이터가 있는 distinct 개월 수 — bucketMonths 미만이면 프론트가 부분 버킷으로 표시. */
+    long monthsInBucket,
     long avgAmount,
     long medianAmount,
     long avgPricePerArea,

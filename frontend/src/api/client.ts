@@ -100,9 +100,10 @@ export const api = {
     tradeType: TradeType,
     from?: string,
     to?: string,
+    bucketMonths = 1,
   ) =>
     request<MonthlyStats[]>('GET', '/api/stats/monthly', {
-      params: { lawdCd, propertyType, tradeType, from, to },
+      params: { lawdCd, propertyType, tradeType, from, to, bucketMonths },
     }),
 
   complexRanking: (lawdCd: string, propertyType: PropertyType, tradeType: TradeType, ym?: string) =>

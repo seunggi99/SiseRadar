@@ -110,7 +110,7 @@ public class InsightService {
     String tradeLabel = tt == TradeType.SALE ? "매매" : "전월세";
     String metricLabel = tt == TradeType.SALE ? "평당가(전용)" : "보증금 평당(전용)";
 
-    List<MonthlyStatsResponse> monthly = stats.monthly(lawdCd, pt, tt, from, to);
+    List<MonthlyStatsResponse> monthly = stats.monthly(lawdCd, pt, tt, from, to, 1);
     if (monthly.isEmpty()) {
       return new InsightBasis(
           regionLabel(lawdCd), propertyLabel, tradeLabel, metricLabel,

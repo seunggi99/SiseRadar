@@ -26,14 +26,15 @@ public class StatsController {
   }
 
   @GetMapping("/monthly")
-  @Operation(summary = "월별 평균/중위/평당가/거래량 + 전월대비 (유형별)")
+  @Operation(summary = "월별/버킷별 평균·중위·평당가·거래량 + 직전대비 (유형별, bucketMonths=1/3/6/12)")
   public List<MonthlyStatsResponse> monthly(
       @RequestParam String lawdCd,
       @RequestParam(required = false, defaultValue = "APT") PropertyType propertyType,
       @RequestParam(required = false, defaultValue = "SALE") TradeType tradeType,
       @RequestParam(required = false) String from,
-      @RequestParam(required = false) String to) {
-    return statsService.monthly(lawdCd, propertyType, tradeType, from, to);
+      @RequestParam(required = false) String to,
+      @RequestParam(required = false, defaultValue = "1") int bucketMonths) {
+    return statsService.monthly(lawdCd, propertyType, tradeType, from, to, bucketMonths);
   }
 
   @GetMapping("/complexes")

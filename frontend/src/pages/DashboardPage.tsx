@@ -38,10 +38,13 @@ import {
 import { regionName } from '../lib/regions';
 
 export function DashboardPage() {
-  const { lawdCd, propertyType, tradeType, setLawdCd, setProperty, setTradeType } = useFilters();
+  const { lawdCd, propertyType, tradeType, from, to, setLawdCd, setProperty, setTradeType } =
+    useFilters();
   const [selectedComplex, setSelectedComplex] = useState<string | null>(null);
   const [mapOpen, setMapOpen] = useState(false);
-  const monthly = useMonthlyStats(lawdCd, propertyType, tradeType);
+  // 차트 봉 하나당 묶는 개월 수(버킷). 표시 범위는 기간 필터(from/to)가 담당.
+  const [bucketMonths, setBucketMonths] = useState(1);
+  const monthly = useMonthlyStats(lawdCd, propertyType, tradeType, from, to, bucketMonths);
   const ranking = useComplexRanking(lawdCd, propertyType, tradeType);
   const isRent = tradeType === 'RENT';
   const meta = propertyMeta(propertyType);
@@ -210,7 +213,12 @@ export function DashboardPage() {
                   &nbsp;&nbsp;<span className="opacity-60">▮</span> 거래량
                 </span>
               </div>
-              <TrendChart data={stats} amountLabel={amountLabel(tradeType)} />
+              <TrendChart
+                data={stats}
+                amountLabel={amountLabel(tradeType)}
+                bucketMonths={bucketMonths}
+                onBucketChange={setBucketMonths}
+              />
             </section>
 
             {/* area-band breakdown (latest month, 전용 기준) */}

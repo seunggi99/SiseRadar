@@ -49,19 +49,28 @@ public interface RealEstateTransactionRepository extends JpaRepository<RealEstat
   @Query(
       value =
           """
-          SELECT t.deal_ymd AS ym,
+          SELECT b.ym AS ym,
                  COUNT(*) AS cnt,
-                 AVG(COALESCE(t.deal_amount, t.deposit)) AS avgAmount,
-                 PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY COALESCE(t.deal_amount, t.deposit)) AS medianAmount,
-                 AVG(COALESCE(t.deal_amount, t.deposit) / NULLIF(t.area, 0)) AS avgPricePerArea,
-                 PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY COALESCE(t.deal_amount, t.deposit) / NULLIF(t.area, 0)) AS medianPricePerArea,
-                 AVG(t.monthly_rent) AS avgMonthlyRent
-          FROM real_estate_transaction t
-          WHERE t.lawd_cd = :lawdCd AND t.property_type = :pt AND t.trade_type = :tt
-            AND (:from IS NULL OR t.deal_ymd >= :from)
-            AND (:to IS NULL OR t.deal_ymd <= :to)
-          GROUP BY t.deal_ymd
-          ORDER BY t.deal_ymd
+                 COUNT(DISTINCT b.deal_ymd) AS monthsInBucket,
+                 AVG(b.amt) AS avgAmount,
+                 PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY b.amt) AS medianAmount,
+                 AVG(b.ppa) AS avgPricePerArea,
+                 PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY b.ppa) AS medianPricePerArea,
+                 AVG(b.monthly_rent) AS avgMonthlyRent
+          FROM (
+            SELECT t.deal_ymd AS deal_ymd,
+                   CAST(CAST(LEFT(t.deal_ymd, 4) AS INT) * 100
+                        + ((CAST(RIGHT(t.deal_ymd, 2) AS INT) - 1) / :bucketMonths * :bucketMonths + 1) AS VARCHAR) AS ym,
+                   COALESCE(t.deal_amount, t.deposit) AS amt,
+                   COALESCE(t.deal_amount, t.deposit) / NULLIF(t.area, 0) AS ppa,
+                   t.monthly_rent AS monthly_rent
+            FROM real_estate_transaction t
+            WHERE t.lawd_cd = :lawdCd AND t.property_type = :pt AND t.trade_type = :tt
+              AND (:from IS NULL OR t.deal_ymd >= :from)
+              AND (:to IS NULL OR t.deal_ymd <= :to)
+          ) b
+          GROUP BY b.ym
+          ORDER BY b.ym
           """,
       nativeQuery = true)
   List<MonthlyStatRow> monthlyStats(
@@ -69,7 +78,8 @@ public interface RealEstateTransactionRepository extends JpaRepository<RealEstat
       @Param("pt") String propertyType,
       @Param("tt") String tradeType,
       @Param("from") String from,
-      @Param("to") String to);
+      @Param("to") String to,
+      @Param("bucketMonths") int bucketMonths);
 
   /**
    * Per-month, per-area-band breakdown (전용면적 기준 구간). Bands: ≤60 / 60–85 / 85–135 / >135.
@@ -78,24 +88,26 @@ public interface RealEstateTransactionRepository extends JpaRepository<RealEstat
   @Query(
       value =
           """
-          SELECT t.deal_ymd AS ym,
-                 CASE WHEN t.area <= 60 THEN 'SMALL'
-                      WHEN t.area <= 85 THEN 'MID_SMALL'
-                      WHEN t.area <= 135 THEN 'MID_LARGE'
-                      ELSE 'LARGE' END AS band,
+          SELECT b.ym AS ym,
+                 b.band AS band,
                  COUNT(*) AS cnt,
-                 AVG(COALESCE(t.deal_amount, t.deposit) / NULLIF(t.area, 0)) AS avgPricePerArea,
-                 PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY COALESCE(t.deal_amount, t.deposit) / NULLIF(t.area, 0)) AS medianPricePerArea
-          FROM real_estate_transaction t
-          WHERE t.lawd_cd = :lawdCd AND t.property_type = :pt AND t.trade_type = :tt
-            AND (:from IS NULL OR t.deal_ymd >= :from)
-            AND (:to IS NULL OR t.deal_ymd <= :to)
-          GROUP BY t.deal_ymd,
-                 CASE WHEN t.area <= 60 THEN 'SMALL'
-                      WHEN t.area <= 85 THEN 'MID_SMALL'
-                      WHEN t.area <= 135 THEN 'MID_LARGE'
-                      ELSE 'LARGE' END
-          ORDER BY t.deal_ymd
+                 AVG(b.ppa) AS avgPricePerArea,
+                 PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY b.ppa) AS medianPricePerArea
+          FROM (
+            SELECT CAST(CAST(LEFT(t.deal_ymd, 4) AS INT) * 100
+                        + ((CAST(RIGHT(t.deal_ymd, 2) AS INT) - 1) / :bucketMonths * :bucketMonths + 1) AS VARCHAR) AS ym,
+                   CASE WHEN t.area <= 60 THEN 'SMALL'
+                        WHEN t.area <= 85 THEN 'MID_SMALL'
+                        WHEN t.area <= 135 THEN 'MID_LARGE'
+                        ELSE 'LARGE' END AS band,
+                   COALESCE(t.deal_amount, t.deposit) / NULLIF(t.area, 0) AS ppa
+            FROM real_estate_transaction t
+            WHERE t.lawd_cd = :lawdCd AND t.property_type = :pt AND t.trade_type = :tt
+              AND (:from IS NULL OR t.deal_ymd >= :from)
+              AND (:to IS NULL OR t.deal_ymd <= :to)
+          ) b
+          GROUP BY b.ym, b.band
+          ORDER BY b.ym
           """,
       nativeQuery = true)
   List<BandStatRow> monthlyStatsByBand(
@@ -103,7 +115,8 @@ public interface RealEstateTransactionRepository extends JpaRepository<RealEstat
       @Param("pt") String propertyType,
       @Param("tt") String tradeType,
       @Param("from") String from,
-      @Param("to") String to);
+      @Param("to") String to,
+      @Param("bucketMonths") int bucketMonths);
 
   @Query(
       value =

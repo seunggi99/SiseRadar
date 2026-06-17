@@ -35,12 +35,13 @@ public class StatsService {
   }
 
   public List<MonthlyStatsResponse> monthly(
-      String lawdCd, PropertyType pt, TradeType tt, String from, String to) {
-    List<MonthlyStatRow> rows = repository.monthlyStats(lawdCd, pt.name(), tt.name(), from, to);
+      String lawdCd, PropertyType pt, TradeType tt, String from, String to, int bucketMonths) {
+    int bucket = (bucketMonths == 3 || bucketMonths == 6 || bucketMonths == 12) ? bucketMonths : 1;
+    List<MonthlyStatRow> rows = repository.monthlyStats(lawdCd, pt.name(), tt.name(), from, to, bucket);
 
-    // area-band breakdown, grouped by month
+    // area-band breakdown, grouped by bucket
     Map<String, List<BandStat>> bandsByYm =
-        repository.monthlyStatsByBand(lawdCd, pt.name(), tt.name(), from, to).stream()
+        repository.monthlyStatsByBand(lawdCd, pt.name(), tt.name(), from, to, bucket).stream()
             .collect(
                 Collectors.groupingBy(
                     BandStatRow::getYm,
@@ -66,6 +67,7 @@ public class StatsService {
           new MonthlyStatsResponse(
               row.getYm(),
               row.getCnt(),
+              row.getMonthsInBucket(),
               Math.round(row.getAvgAmount()),
               Math.round(row.getMedianAmount()),
               Math.round(row.getAvgPricePerArea()),
@@ -132,7 +134,7 @@ public class StatsService {
 
     // naive contrast: region-wide avg 단위면적가 change between the same two months
     Map<String, Double> regionAvg =
-        repository.monthlyStats(lawdCd, pt.name(), tt.name(), fromYm, toYm).stream()
+        repository.monthlyStats(lawdCd, pt.name(), tt.name(), fromYm, toYm, 1).stream()
             .collect(Collectors.toMap(MonthlyStatRow::getYm, MonthlyStatRow::getAvgPricePerArea));
     Double naive = null;
     Double f = regionAvg.get(fromYm);

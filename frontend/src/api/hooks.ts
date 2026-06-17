@@ -3,10 +3,17 @@ import { api } from './client';
 import type { AlertCondition, Bounds, PropertyType, TradeType, WatchType } from './types';
 
 // ── public ──
-export function useMonthlyStats(lawdCd: string, propertyType: PropertyType, tradeType: TradeType) {
+export function useMonthlyStats(
+  lawdCd: string,
+  propertyType: PropertyType,
+  tradeType: TradeType,
+  from?: string,
+  to?: string,
+  bucketMonths = 1,
+) {
   return useQuery({
-    queryKey: ['monthly', lawdCd, propertyType, tradeType],
-    queryFn: () => api.monthlyStats(lawdCd, propertyType, tradeType),
+    queryKey: ['monthly', lawdCd, propertyType, tradeType, from, to, bucketMonths],
+    queryFn: () => api.monthlyStats(lawdCd, propertyType, tradeType, from, to, bucketMonths),
   });
 }
 

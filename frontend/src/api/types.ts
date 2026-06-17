@@ -12,8 +12,11 @@ export type PropertyType =
 export type TradeType = 'SALE' | 'RENT';
 
 export interface MonthlyStats {
+  /** 버킷 시작월 YYYYMM (bucketMonths=1이면 그 달). */
   ym: string;
   count: number;
+  /** 버킷에 데이터가 있는 distinct 개월 수 — bucketMonths 미만이면 부분 버킷. */
+  monthsInBucket: number;
   /** Primary amount (만원): 매매 거래가 / 전월세 보증금. 거래 구성에 휘둘리는 참고용. */
   avgAmount: number;
   medianAmount: number;
