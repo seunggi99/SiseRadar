@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from './client';
 import type { AlertCondition, Bounds, PropertyType, TradeType, WatchType } from './types';
 
@@ -97,6 +97,9 @@ export function useMapComplexesInBounds(
     queryKey: ['mapComplexesBbox', bounds, propertyType, tradeType, from, to, band],
     queryFn: () => api.map.complexesInBounds(bounds!, propertyType, tradeType, from, to, band),
     enabled: enabled && bounds !== null,
+    // bbox(=queryKey)가 팬마다 바뀌어도 새 데이터 도착 전까지 이전 마커 data 유지 →
+    // markerData가 빈 배열로 깜빡이지 않고 순수 incremental diff로 갱신.
+    placeholderData: keepPreviousData,
     // bounded polling while background geocoding fills markers, then stop (Kakao quota 보호)
     refetchInterval: (query) => (query.state.dataUpdateCount < 6 ? 8000 : false),
   });
