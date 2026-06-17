@@ -37,6 +37,22 @@ import {
 } from '../lib/format';
 import { regionName } from '../lib/regions';
 
+/** 버킷 크기(개월)에 맞는 기간 명사 — 전월/전분기/전반기/전년 라벨에 사용. */
+function periodNoun(bucketMonths: number): string {
+  return bucketMonths === 1 ? '월' : bucketMonths === 3 ? '분기' : bucketMonths === 6 ? '반기' : '년';
+}
+
+/** 최신 버킷의 기간 표기: 1개월 "2026년 6월", 그 외 "2026.04~06" / "2025.10~2026.03". */
+function bucketSpan(ym: string, bucketMonths: number): string {
+  const sy = ym.slice(0, 4);
+  const sm = ym.slice(4, 6);
+  if (bucketMonths <= 1) return `${sy}년 ${Number(sm)}월`;
+  const idx = Number(sy) * 12 + (Number(sm) - 1) + bucketMonths - 1;
+  const ey = Math.floor(idx / 12);
+  const em = String((idx % 12) + 1).padStart(2, '0');
+  return ey === Number(sy) ? `${sy}.${sm}~${em}` : `${sy}.${sm}~${ey}.${em}`;
+}
+
 export function DashboardPage() {
   const { lawdCd, propertyType, tradeType, from, to, setLawdCd, setProperty, setTradeType } =
     useFilters();
@@ -172,12 +188,12 @@ export function DashboardPage() {
                 sub={formatManwon(latest.avgAmount)}
               />
               <KpiCard
-                label="거래량 (최근월)"
+                label={bucketMonths === 1 ? '거래량 (최근월)' : `거래량 (최근 ${periodNoun(bucketMonths)})`}
                 value={`${formatCount(latest.count)}건`}
-                sub={`${formatYmLong(latest.ym)} · 전체 기간은 AI 요약 참고`}
+                sub={`${bucketSpan(latest.ym, bucketMonths)} · 전체 기간은 AI 요약 참고`}
               />
               <KpiCard
-                label="전월 대비"
+                label={`전${periodNoun(bucketMonths)} 대비`}
                 value={latest.momChangePct === null ? '—' : formatPercent(latest.momChangePct)}
                 valueColor={directionColor(latest.momChangePct)}
                 sub="중위 ㎡당 기준"
