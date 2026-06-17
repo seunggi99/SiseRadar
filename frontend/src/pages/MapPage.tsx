@@ -23,18 +23,54 @@ import { isKnownRegion, regionName } from '../lib/regions';
 const REGION_ZOOM = 8;
 // 버블 클릭/검색 점프 시 들어갈 단지 마커 줌.
 const MARKER_ZOOM = 5;
+// 이 레벨 이하(많이 확대)면 값 라벨 핀, 초과면 또렷한 점.
+const LABEL_ZOOM = 3;
 // 범례 색칩 폭(px) — 경계 라벨("4,000")보다 넓어 라벨이 겹치지 않는다.
 const SWATCH_W = 38;
 
 /** 색 인코딩 모드: 시세(평당가 수준 teal) ↔ 상승률(1년 변동률 diverging). */
 type ColorMode = 'price' | 'change';
 
-function markerImage(kakao: any, color: string) {
-  const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='18' height='18'><circle cx='9' cy='9' r='6.5' fill='${color}' stroke='white' stroke-opacity='0.9' stroke-width='1.5'/></svg>`;
+/** 채움색 상대휘도로 글자색(흑/백) 선택 — 밝은 teal엔 진한 글자, 진한 색엔 흰 글자. */
+function textOn(hex: string): string {
+  const h = hex.replace('#', '');
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return lum > 0.6 ? '#06241f' : '#ffffff';
+}
+
+/** 또렷한 점 마커 — 흰 테두리 + 얇은 외곽 링 + 그림자로 밝은 색도 기본맵 위에서 분리. */
+function markerDotImage(kakao: any, color: string) {
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24'><filter id='s' x='-50%' y='-50%' width='200%' height='200%'><feDropShadow dx='0' dy='1' stdDeviation='1.2' flood-opacity='0.35'/></filter><circle cx='12' cy='12' r='8' fill='${color}' stroke='white' stroke-width='2' filter='url(#s)'/><circle cx='12' cy='12' r='9' fill='none' stroke='rgba(0,0,0,0.25)' stroke-width='0.6'/></svg>`;
   return new kakao.maps.MarkerImage(
     'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg),
-    new kakao.maps.Size(18, 18),
-    { offset: new kakao.maps.Point(9, 9) },
+    new kakao.maps.Size(24, 24),
+    { offset: new kakao.maps.Point(12, 12) },
+  );
+}
+
+/** 값 라벨 핀(pill) — 둥근 사각 + 하단 ▼ 포인터. 폭은 라벨 길이에 비례, 앵커=포인터 끝. */
+function markerPillImage(kakao: any, label: string, color: string) {
+  const w = Math.max(34, label.length * 8 + 16);
+  const h = 20;
+  const total = h + 6; // 포인터 6px
+  const txt = textOn(color);
+  const svg =
+    `<svg xmlns='http://www.w3.org/2000/svg' width='${w}' height='${total}'>` +
+    `<filter id='s' x='-50%' y='-50%' width='200%' height='200%'><feDropShadow dx='0' dy='1' stdDeviation='1.2' flood-opacity='0.35'/></filter>` +
+    `<g filter='url(#s)'>` +
+    `<rect x='1' y='1' width='${w - 2}' height='${h}' rx='5' fill='${color}' stroke='white' stroke-width='1.5'/>` +
+    `<path d='M ${w / 2 - 5} ${h} L ${w / 2 + 5} ${h} L ${w / 2} ${h + 6} Z' fill='${color}' stroke='white' stroke-width='1.5'/>` +
+    `</g>` +
+    `<text x='${w / 2}' y='${h / 2 + 1}' text-anchor='middle' dominant-baseline='central' ` +
+    `font-family='-apple-system,BlinkMacSystemFont,sans-serif' font-size='11' font-weight='700' fill='${txt}'>${escapeHtml(label)}</text>` +
+    `</svg>`;
+  return new kakao.maps.MarkerImage(
+    'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg),
+    new kakao.maps.Size(w, total),
+    { offset: new kakao.maps.Point(w / 2, total) },
   );
 }
 
@@ -52,6 +88,15 @@ function markerImageMuted(kakao: any) {
 function markerColorFor(c: MapComplex, mode: ColorMode, tradeType: TradeType): string | null {
   if (mode === 'change') return c.changePct == null ? null : colorForChange(c.changePct);
   return colorForArea(c.avgPricePerArea, tradeType);
+}
+
+/** 값 라벨 핀에 적을 문자열: 시세=평당가(만원/평), 상승률=±%. */
+function markerLabel(c: MapComplex, mode: ColorMode): string {
+  if (mode === 'change') {
+    const p = c.changePct ?? 0;
+    return `${p > 0 ? '+' : ''}${p.toFixed(1)}%`;
+  }
+  return pyeong(c.avgPricePerArea); // 만원/평, 콤마
 }
 
 function escapeHtml(s: string): string {
@@ -157,6 +202,7 @@ export function MapPage() {
   const [colorMode, setColorMode] = useState<ColorMode>('price');
 
   const showBubbles = level >= REGION_ZOOM;
+  const labelMode = !showBubbles && level <= LABEL_ZOOM; // 많이 확대 → 값 라벨 핀
   const hasMarkers = propertyMeta(propertyType).hasRanking; // 건물명 유형만 마커
 
   const complexes = useMapComplexesInBounds(
@@ -268,8 +314,8 @@ export function MapPage() {
       return;
     }
 
-    // 유형/거래/평형대/색모드가 바뀌면 색이 달라지므로 전체 재생성(팬·줌은 해당 없음)
-    const filterKey = `${propertyType}|${tradeType}|${band ?? ''}|${colorMode}`;
+    // 유형/거래/평형대/색모드/줌tier(점↔핀)가 바뀌면 마커 모양·색이 달라지므로 전체 재생성
+    const filterKey = `${propertyType}|${tradeType}|${band ?? ''}|${colorMode}|${labelMode ? 'pill' : 'dot'}`;
     if (lastFilterKey.current !== filterKey) {
       clusterer.current.clear();
       store.clear();
@@ -278,9 +324,15 @@ export function MapPage() {
 
     const makeMarker = (c: MapComplex) => {
       const color = markerColorFor(c, colorMode, tradeType);
+      const image =
+        color == null
+          ? markerImageMuted(kakao) // 데이터 부족: tier 무관 점선 빈 마커(값 미표시)
+          : labelMode
+            ? markerPillImage(kakao, markerLabel(c, colorMode), color)
+            : markerDotImage(kakao, color);
       const marker = new kakao.maps.Marker({
         position: new kakao.maps.LatLng(c.lat, c.lng),
-        image: color == null ? markerImageMuted(kakao) : markerImage(kakao, color),
+        image,
         title: c.buildingName,
       });
       (marker as any).txCount = c.count; // 클러스터 거래합 계산용
@@ -328,7 +380,7 @@ export function MapPage() {
       toAdd.push(m);
     });
     if (toAdd.length) clusterer.current.addMarkers(toAdd);
-  }, [markerData, ready, showBubbles, tradeType, propertyType, band, colorMode]);
+  }, [markerData, ready, showBubbles, labelMode, tradeType, propertyType, band, colorMode]);
 
   // 지역 버블: 저줌(showBubbles)일 때만. 마커와 같은 절대 색 스케일 공유. 클릭 → 줌인 + 지역 동기화.
   useEffect(() => {
