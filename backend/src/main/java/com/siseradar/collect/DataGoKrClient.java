@@ -7,6 +7,7 @@ import java.net.URI;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 
 /**
@@ -45,7 +46,13 @@ public class DataGoKrClient {
             + "&pageNo=" + pageNo
             + "&numOfRows=" + numOfRows;
 
-    String body = restClient.get().uri(URI.create(url)).retrieve().body(String.class);
+    String body;
+    try {
+      body = restClient.get().uri(URI.create(url)).retrieve().body(String.class);
+    } catch (HttpClientErrorException.TooManyRequests e) {
+      // 일일 쿼터 초과 — 회복 가능. 스택트레이스 없이 전용 예외로 변환(글로벌 핸들러가 429 매핑).
+      throw new DataGoKrQuotaException(operationPath);
+    }
 
     try {
       RtmsApiResponse response = xmlMapper.readValue(body, RtmsApiResponse.class);

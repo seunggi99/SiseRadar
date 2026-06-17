@@ -23,7 +23,8 @@ siseradar:
   collection:
     lawd-codes: 41135
     recent-months: 2
-    num-of-rows: 100
+    # data.go.kr 한 페이지 최대 행수. 크게 잡아 페이지네이션 콜 수를 줄임(일일 API 쿼터 절약).
+    num-of-rows: 1000
     page-delay-ms: 200
     cron: "0 0 4 * * *"
   cors:
