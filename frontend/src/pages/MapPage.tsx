@@ -16,7 +16,7 @@ import {
   scaleThresholds,
   TEAL_SHADES,
 } from '../lib/priceScale';
-import { propertyMeta } from '../lib/propertyTypes';
+import { mappableTypes, propertyMeta } from '../lib/propertyTypes';
 import { isKnownRegion, regionName } from '../lib/regions';
 
 // Kakao 레벨은 클수록 더 멀리(축소). 이 레벨 이상이면 지역 버블, 미만이면 단지 마커.
@@ -208,6 +208,11 @@ export function MapPage() {
   const labelMode = !showBubbles && level <= LABEL_ZOOM; // 많이 확대 → 값 라벨 핀
   const clustered = !showBubbles && level >= CLUSTER_MIN; // 5~7: 클러스터러 / 1~4: 직접
   const hasMarkers = propertyMeta(propertyType).hasRanking; // 건물명 유형만 마커
+
+  // 전역 필터가 지도에 못 올리는 유형(토지·상업 등)이면 지도 진입 시 APT로 클램프.
+  useEffect(() => {
+    if (!propertyMeta(propertyType).mappable) setProperty('APT');
+  }, [propertyType, setProperty]);
 
   const complexes = useMapComplexesInBounds(
     bounds,
@@ -494,6 +499,7 @@ export function MapPage() {
               tradeType={tradeType}
               onPropertyChange={setProperty}
               onTradeChange={setTradeType}
+              allowedTypes={mappableTypes()}
             />
             <RegionSearch onSelect={(r) => onJump(r.lawdCd)} />
           </div>

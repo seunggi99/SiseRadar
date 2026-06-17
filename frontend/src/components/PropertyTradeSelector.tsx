@@ -6,6 +6,8 @@ interface Props {
   tradeType: TradeType;
   onPropertyChange: (pt: PropertyType) => void;
   onTradeChange: (tt: TradeType) => void;
+  /** 주어지면 이 유형만 옵션으로 노출(지도=주거 3종). 미지정 시 전체(대시보드). */
+  allowedTypes?: PropertyType[];
 }
 
 export function PropertyTradeSelector({
@@ -13,8 +15,12 @@ export function PropertyTradeSelector({
   tradeType,
   onPropertyChange,
   onTradeChange,
+  allowedTypes,
 }: Props) {
   const rentAvailable = propertyMeta(propertyType).rentAvailable;
+  const options = allowedTypes
+    ? PROPERTY_TYPES.filter((p) => allowedTypes.includes(p.key))
+    : PROPERTY_TYPES;
 
   return (
     <div className="flex items-center gap-2">
@@ -24,7 +30,7 @@ export function PropertyTradeSelector({
         onChange={(e) => onPropertyChange(e.target.value as PropertyType)}
         aria-label="부동산 유형"
       >
-        {PROPERTY_TYPES.map((p) => (
+        {options.map((p) => (
           <option key={p.key} value={p.key} disabled={!p.enabled}>
             {p.label}
             {p.enabled ? '' : ' (준비중)'}
