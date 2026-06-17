@@ -13,6 +13,15 @@ java {
     }
 }
 
+// 배포 산출물을 결정적으로: 실행 가능한 app.jar 하나만 생성(비실행 -plain.jar 비활성).
+// Railway 시작 명령이 build/libs/app.jar 를 그대로 가리킨다.
+tasks.named('bootJar') {
+    archiveFileName = 'app.jar'
+}
+tasks.named('jar') {
+    enabled = false
+}
+
 repositories {
     mavenCentral()
 }
