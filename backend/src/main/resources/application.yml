@@ -13,6 +13,7 @@ siseradar:
   datagokr:
     base-url: https://apis.data.go.kr/1613000
     service-key: ${DATA_GO_KR_SERVICE_KEY}
+    service-key-decoding: ${DATA_GO_KR_SERVICE_DECODING_KEY:}
   kakao:
     rest-key: ${KAKAO_REST_API_KEY:}
   gemini:

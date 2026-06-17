@@ -4,9 +4,11 @@ import com.siseradar.collect.DataGoKrProperties;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.net.URI;
+import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
@@ -41,7 +43,7 @@ public class DiagController {
   }
 
   @GetMapping("/datagokr")
-  @Operation(summary = "이 서버 IP에서 data.go.kr 호출 가능 여부 진단 (임시)")
+  @Operation(summary = "이 서버 IP에서 data.go.kr 호출 가능 여부 진단 — 인코딩/디코딩 키 둘 다 시도 (임시)")
   public Map<String, Object> datagokr() {
     Map<String, Object> out = new LinkedHashMap<>();
     String dealYmd = YearMonth.now().minusMonths(1).format(YM); // 직전 완전월
@@ -49,49 +51,67 @@ public class DiagController {
     out.put("dealYmd", dealYmd);
     out.put("outboundIp", outboundIp());
 
-    boolean keySet = props.serviceKey() != null && !props.serviceKey().isBlank();
-    out.put("serviceKeyConfigured", keySet);
-    if (!keySet) {
-      out.put("error", "DATA_GO_KR_SERVICE_KEY 미설정");
-      return out;
-    }
+    boolean encSet = props.serviceKey() != null && !props.serviceKey().isBlank();
+    boolean decSet = props.serviceKeyDecoding() != null && !props.serviceKeyDecoding().isBlank();
+    out.put("encodingKeyConfigured", encSet);
+    out.put("decodingKeyConfigured", decSet);
 
-    // encoding 키를 그대로 사용(이중 인코딩 금지) — 기존 수집 클라이언트와 동일 방식
+    // 인코딩 키: 이미 percent-encoded → URL에 그대로. 디코딩 키: raw(+,/,=) → URL-encode 필요.
+    Map<String, Object> enc =
+        encSet ? attempt(dealYmd, props.serviceKey()) : Map.of("skipped", "DATA_GO_KR_SERVICE_KEY 미설정");
+    Map<String, Object> dec =
+        decSet
+            ? attempt(dealYmd, URLEncoder.encode(props.serviceKeyDecoding(), StandardCharsets.UTF_8))
+            : Map.of("skipped", "DATA_GO_KR_SERVICE_DECODING_KEY 미설정");
+    out.put("encoding", enc);
+    out.put("decoding", dec);
+    out.put("worked", isOk(enc) ? "encoding" : isOk(dec) ? "decoding" : "none");
+    return out;
+  }
+
+  /** One call with a URL-ready serviceKey value; returns the parsed result (never throws). */
+  private Map<String, Object> attempt(String dealYmd, String serviceKeyForUrl) {
+    Map<String, Object> r = new LinkedHashMap<>();
     String url =
         props.baseUrl()
             + OP
-            + "?serviceKey=" + props.serviceKey()
+            + "?serviceKey=" + serviceKeyForUrl
             + "&LAWD_CD=11110"
             + "&DEAL_YMD=" + dealYmd
             + "&pageNo=1&numOfRows=1";
-
     try {
       HttpRequest req =
           HttpRequest.newBuilder(URI.create(url)).timeout(Duration.ofSeconds(10)).GET().build();
       HttpResponse<String> res = http.send(req, HttpResponse.BodyHandlers.ofString());
       String body = res.body() == null ? "" : res.body();
-
-      out.put("httpStatus", res.statusCode());
       String resultCode = firstGroup(body, "<resultCode>(.*?)</resultCode>");
       String reasonCode = firstGroup(body, "<returnReasonCode>(.*?)</returnReasonCode>");
-      out.put("resultCode", resultCode);
-      out.put("resultMsg", firstGroup(body, "<resultMsg>(.*?)</resultMsg>"));
-      out.put("errorCode", reasonCode != null ? reasonCode : errorish(resultCode));
-      out.put(
+      int items = countMatches(body, "<item>");
+      String totalCount = firstGroup(body, "<totalCount>(.*?)</totalCount>");
+      r.put("httpStatus", res.statusCode());
+      r.put("resultCode", resultCode);
+      r.put("resultMsg", firstGroup(body, "<resultMsg>(.*?)</resultMsg>"));
+      r.put("errorCode", reasonCode != null ? reasonCode : errorish(resultCode));
+      r.put(
           "errorMsg",
           coalesce(
               firstGroup(body, "<returnAuthMsg>(.*?)</returnAuthMsg>"),
               firstGroup(body, "<errMsg>(.*?)</errMsg>")));
-      String totalCount = firstGroup(body, "<totalCount>(.*?)</totalCount>");
-      out.put("totalCount", totalCount == null ? null : Integer.valueOf(totalCount.trim()));
-      out.put("itemCount", countMatches(body, "<item>"));
-      out.put("verdict", verdict(res.statusCode(), resultCode, reasonCode, countMatches(body, "<item>")));
-      out.put("bodyHead", body.length() > 300 ? body.substring(0, 300) : body);
+      r.put("totalCount", totalCount == null ? null : Integer.valueOf(totalCount.trim()));
+      r.put("itemCount", items);
+      r.put("ok", res.statusCode() == 200 && "000".equals(resultCode));
+      r.put("verdict", verdict(res.statusCode(), resultCode, reasonCode, items));
+      r.put("bodyHead", body.length() > 300 ? body.substring(0, 300) : body);
     } catch (Exception e) {
-      out.put("httpStatus", null);
-      out.put("error", e.getClass().getSimpleName() + ": " + e.getMessage());
+      r.put("httpStatus", null);
+      r.put("ok", false);
+      r.put("error", e.getClass().getSimpleName() + ": " + e.getMessage());
     }
-    return out;
+    return r;
+  }
+
+  private static boolean isOk(Map<String, Object> r) {
+    return Boolean.TRUE.equals(r.get("ok"));
   }
 
   /** This server's public outbound IP (best-effort, short timeout). */
