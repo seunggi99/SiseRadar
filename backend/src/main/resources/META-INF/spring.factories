@@ -1,1 +1,1 @@
-org.springframework.boot.env.EnvironmentPostProcessor=com.siseradar.config.RailwayDatasourceGuard
+org.springframework.boot.env.EnvironmentPostProcessor=com.siseradar.config.RailwayDatasourceGuard,com.siseradar.config.RailwayDatabaseUrlProcessor

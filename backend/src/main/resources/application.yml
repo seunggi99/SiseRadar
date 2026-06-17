@@ -1,5 +1,6 @@
 server:
-  port: ${SERVER_PORT:8080}
+  # Railway/Heroku는 PORT를 주입 → 그걸 우선 사용. 로컬은 SERVER_PORT(없으면 8080).
+  port: ${PORT:${SERVER_PORT:8080}}
 
 spring:
   application:
@@ -55,15 +56,18 @@ spring:
         format_sql: true
 
 ---
-# Prod profile — PostgreSQL via environment variables
+# Prod profile — PostgreSQL via environment variables.
+# Railway/Heroku의 DATABASE_URL(postgres://…)은 RailwayDatabaseUrlProcessor가 jdbc로 변환해
+# spring.datasource.*를 최우선 주입하므로 아래 값은 폴백(이미 jdbc면 그대로 사용).
+# 마이그레이션 도구가 없고 클라우드 DB가 비어 시작하므로 ddl-auto=update로 스키마 생성.
 spring:
   config:
     activate:
       on-profile: prod
   datasource:
-    url: ${DATABASE_URL}
-    username: ${DB_USERNAME}
-    password: ${DB_PASSWORD}
+    url: ${DATABASE_URL:}
+    username: ${DB_USERNAME:}
+    password: ${DB_PASSWORD:}
   jpa:
     hibernate:
-      ddl-auto: validate
+      ddl-auto: update
