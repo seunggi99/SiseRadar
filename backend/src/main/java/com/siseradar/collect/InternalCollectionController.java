@@ -1,6 +1,7 @@
 package com.siseradar.collect;
 
 import com.siseradar.domain.PropertyType;
+import com.siseradar.domain.TradeType;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.ArrayList;
@@ -34,11 +35,12 @@ public class InternalCollectionController {
       @RequestParam String lawdCd,
       @RequestParam(required = false) String dealYmd,
       @RequestParam(required = false, defaultValue = "1") int recentMonths,
-      @RequestParam(required = false) String types) {
+      @RequestParam(required = false) String types,
+      @RequestParam(required = false) String trades) {
     List<String> months =
         dealYmd != null ? List.of(dealYmd) : CollectionScheduler.recentMonths(recentMonths);
-    // types=APT,OFFICETEL,... 로 수집할 유형을 좁힐 수 있다(미지정=전유형). data.go.kr 저한도 API
-    // (토지·분양권 등) 일일 쿼터 소진 시 주거 유형만 분리 수집하기 위함.
+    // types=APT,OFFICETEL,... / trades=SALE,RENT 로 수집 범위를 좁힐 수 있다(미지정=전체). data.go.kr
+    // 일일 쿼터가 유형·거래별로 따로 소진되므로(예: 전월세 API만 소진), 남은 것만 분리 수집하기 위함.
     List<RtmsOperations.TypePair> pairs = RtmsOperations.ENABLED;
     if (types != null && !types.isBlank()) {
       Set<PropertyType> wanted =
@@ -47,7 +49,16 @@ public class InternalCollectionController {
               .filter(s -> !s.isBlank())
               .map(s -> PropertyType.valueOf(s.toUpperCase()))
               .collect(Collectors.toSet());
-      pairs = RtmsOperations.ENABLED.stream().filter(p -> wanted.contains(p.propertyType())).toList();
+      pairs = pairs.stream().filter(p -> wanted.contains(p.propertyType())).toList();
+    }
+    if (trades != null && !trades.isBlank()) {
+      Set<TradeType> wantedTrades =
+          Arrays.stream(trades.split(","))
+              .map(String::trim)
+              .filter(s -> !s.isBlank())
+              .map(s -> TradeType.valueOf(s.toUpperCase()))
+              .collect(Collectors.toSet());
+      pairs = pairs.stream().filter(p -> wantedTrades.contains(p.tradeType())).toList();
     }
     List<TradeCollectionService.Result> results = new ArrayList<>();
     for (String ym : months) {
