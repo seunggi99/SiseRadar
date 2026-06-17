@@ -1,0 +1,27 @@
+# Railway PostgreSQL 프로파일 — 로컬에서 원격 Railway DB로 직접 백필/수집할 때 사용.
+# 기본(default, H2 파일)·prod 프로파일은 그대로 두고, 이 프로파일은 별도로만 쓴다.
+#
+# 실행:
+#   ./gradlew bootRun --args='--spring.profiles.active=railway'
+#   (RAILWAY_DB_URL / RAILWAY_DB_USERNAME / RAILWAY_DB_PASSWORD 는 .env 또는 실행 환경에서 주입)
+#
+# ⚠ url은 반드시 JDBC 형식: jdbc:postgresql://HOST:PORT/DB  (필요 시 ?sslmode=require)
+#   Railway가 주는 DATABASE_URL은 postgresql://user:pass@host... 형식이라 그대로 못 쓴다 →
+#   jdbc:postgresql://host:port/db 로 변환하고 user/password는 아래 username/password로 분리 주입.
+#   (형식이 틀리면 RailwayDatasourceGuard가 부팅 시 즉시 막는다.)
+#
+# ⚠ 이 파일에 실제 접속 정보 하드코딩 금지 — 전부 환경변수 placeholder.
+
+spring:
+  datasource:
+    url: ${RAILWAY_DB_URL}
+    username: ${RAILWAY_DB_USERNAME}
+    password: ${RAILWAY_DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      # 원격 스키마 생성/갱신 (백필 목적). prod(validate)와 분리.
+      ddl-auto: update
+    properties:
+      hibernate:
+        format_sql: true
