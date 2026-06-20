@@ -2,11 +2,13 @@ package com.siseradar.collect;
 
 import com.siseradar.domain.PropertyType;
 import com.siseradar.domain.TradeType;
+import com.siseradar.map.MapService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -24,9 +26,18 @@ import org.springframework.web.bind.annotation.RestController;
 public class InternalCollectionController {
 
   private final TradeCollectionService collectionService;
+  private final MapService mapService;
 
-  public InternalCollectionController(TradeCollectionService collectionService) {
+  public InternalCollectionController(
+      TradeCollectionService collectionService, MapService mapService) {
     this.collectionService = collectionService;
+    this.mapService = mapService;
+  }
+
+  @PostMapping("/geocode")
+  @Operation(summary = "한 지역의 모든 주거 단지를 일괄 지오코딩(캐시 워밍)한다 — 멱등")
+  public Map<String, Integer> geocode(@RequestParam String lawdCd) {
+    return mapService.warmRegion(lawdCd);
   }
 
   @PostMapping("/collect")

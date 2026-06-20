@@ -122,11 +122,14 @@ export function useMapRegions(
   from: string | undefined,
   to: string | undefined,
   band: string | undefined,
+  enabled: boolean,
 ) {
   return useQuery({
     queryKey: ['mapRegions', propertyType, tradeType, from, to, band],
     queryFn: () => api.map.regions(propertyType, tradeType, from, to, band),
-    refetchInterval: (query) => (query.state.dataUpdateCount < 6 ? 4000 : false),
+    enabled,
+    // 버블이 보일 때만(저줌) 실행·폴링. 서버 캐시 히트면 즉시, centroid 차오를 때만 잠깐 재폴링.
+    refetchInterval: (query) => (query.state.dataUpdateCount < 3 ? 4000 : false),
   });
 }
 

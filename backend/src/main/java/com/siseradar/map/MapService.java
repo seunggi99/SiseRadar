@@ -5,6 +5,7 @@ import com.siseradar.domain.GeocodeStatus;
 import com.siseradar.domain.PropertyType;
 import com.siseradar.domain.RegionCentroid;
 import com.siseradar.domain.TradeType;
+import com.siseradar.repository.BuildingRow;
 import com.siseradar.repository.ComplexGeocodeRepository;
 import com.siseradar.repository.MapComplexStatRow;
 import com.siseradar.repository.MapRegionStatRow;
@@ -21,6 +22,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 
@@ -46,6 +48,13 @@ public class MapService {
   /** Only these types get individual markers (geocodable building names). */
   private static final Set<PropertyType> MARKER_TYPES =
       EnumSet.of(PropertyType.APT, PropertyType.OFFICETEL, PropertyType.ROW_HOUSE);
+
+  /** Region-bubble aggregates change only on new collection → short-TTL cache (5.7s query → instant). */
+  private static final long REGIONS_TTL_MS = 10 * 60 * 1000L;
+
+  private record CachedRegions(long at, List<MapRegionResponse> data) {}
+
+  private final Map<String, CachedRegions> regionsCache = new ConcurrentHashMap<>();
 
   private final RealEstateTransactionRepository trades;
   private final ComplexGeocodeRepository geocodes;
@@ -75,6 +84,35 @@ public class MapService {
     List<MapComplexResponse> out = new ArrayList<>();
     collectComplexes(lawdCd, pt, tt, from, to, band, out, new int[] {0});
     return out;
+  }
+
+  /**
+   * Eagerly geocode ALL mappable buildings of a region (synchronous, sequential) so markers render
+   * in one shot instead of trickling in via the lazy 25/request cap. Idempotent — already-cached
+   * buildings are skipped, so re-runs resume. A transient Kakao error propagates (warm job backs
+   * off) leaving the rest uncached. Returns {attempted, success, skipped}.
+   */
+  public Map<String, Integer> warmRegion(String lawdCd) {
+    int attempted = 0;
+    int success = 0;
+    int skipped = 0;
+    for (PropertyType pt : MARKER_TYPES) {
+      Set<String> cached =
+          geocodes.findByLawdCdAndPropertyType(lawdCd, pt).stream()
+              .map(ComplexGeocode::getBuildingName)
+              .collect(Collectors.toSet());
+      for (BuildingRow b : trades.distinctBuildings(lawdCd, pt.name())) {
+        if (cached.contains(b.getBuildingName())) {
+          skipped++;
+          continue;
+        }
+        attempted++;
+        if (worker.geocodeSync(lawdCd, pt, b.getBuildingName(), b.getUmdNm())) {
+          success++;
+        }
+      }
+    }
+    return Map.of("attempted", attempted, "success", success, "skipped", skipped);
   }
 
   /**
@@ -211,6 +249,19 @@ public class MapService {
    * once); regions whose centroid isn't cached yet are queued (capped) and appear on a later call.
    */
   public List<MapRegionResponse> regions(
+      PropertyType pt, TradeType tt, String from, String to, String band) {
+    String cacheKey = pt + "|" + tt + "|" + from + "|" + to + "|" + band;
+    CachedRegions hit = regionsCache.get(cacheKey);
+    long now = System.currentTimeMillis();
+    if (hit != null && now - hit.at() < REGIONS_TTL_MS) {
+      return hit.data();
+    }
+    List<MapRegionResponse> out = computeRegions(pt, tt, from, to, band);
+    regionsCache.put(cacheKey, new CachedRegions(now, out));
+    return out;
+  }
+
+  private List<MapRegionResponse> computeRegions(
       PropertyType pt, TradeType tt, String from, String to, String band) {
     String bandFilter = (band == null || band.isBlank()) ? null : band;
     List<MapRegionStatRow> stats = trades.regionStats(pt.name(), tt.name(), from, to, bandFilter);

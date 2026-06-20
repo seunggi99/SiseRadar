@@ -420,6 +420,21 @@ public interface RealEstateTransactionRepository extends JpaRepository<RealEstat
       @Param("pt") PropertyType propertyType,
       @Param("tt") TradeType tradeType);
 
+  /**
+   * Distinct building names (+대표 동) for one (region, propertyType) across all trades — used to
+   * eagerly warm the geocode cache so markers render in one shot instead of trickling in.
+   */
+  @Query(
+      value =
+          """
+          SELECT t.building_name AS buildingName, MAX(t.umd_nm) AS umdNm
+          FROM real_estate_transaction t
+          WHERE t.lawd_cd = :lawdCd AND t.property_type = :pt AND t.building_name IS NOT NULL
+          GROUP BY t.building_name
+          """,
+      nativeQuery = true)
+  List<BuildingRow> distinctBuildings(@Param("lawdCd") String lawdCd, @Param("pt") String propertyType);
+
   /** Average primary amount (만원) for a region+month+type — for alert evaluation. */
   @Query(
       "SELECT AVG(COALESCE(t.dealAmount, t.deposit)) FROM RealEstateTransaction t "

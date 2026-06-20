@@ -222,7 +222,8 @@ export function MapPage() {
     band ?? undefined,
     hasMarkers && !showBubbles,
   );
-  const regions = useMapRegions(propertyType, tradeType, from, to, band ?? undefined);
+  // 버블은 저줌(showBubbles)일 때만 — 마커 모드(고줌)에선 무거운 전지역 집계 쿼리를 안 돌린다.
+  const regions = useMapRegions(propertyType, tradeType, from, to, band ?? undefined, showBubbles);
   const markerData = useMemo(
     () => (hasMarkers && !showBubbles ? (complexes.data ?? []) : []),
     [complexes.data, hasMarkers, showBubbles],

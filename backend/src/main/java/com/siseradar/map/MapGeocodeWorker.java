@@ -53,21 +53,7 @@ public class MapGeocodeWorker {
   public void geocode(
       String lawdCd, PropertyType pt, String buildingName, String umdNm, String key) {
     try {
-      String query = (umdNm == null ? "" : umdNm + " ") + buildingName;
-      GeoPlace gp = kakao.geocodePlace(query); // RestClientException on quota/network (transient)
-
-      // SUCCESS only if the geocoded address is actually in the expected 시군구. A genuine
-      // no-result or wrong-시군구 caches FAILED (don't retry forever); a transient error is
-      // thrown and handled below WITHOUT caching, so the building retries on a later request.
-      boolean ok = gp != null && inExpectedSigungu(lawdCd, gp.addressName());
-      repo.save(
-          new ComplexGeocode(
-              lawdCd,
-              pt,
-              buildingName,
-              ok ? gp.lat() : null,
-              ok ? gp.lng() : null,
-              ok ? GeocodeStatus.SUCCESS : GeocodeStatus.FAILED));
+      doGeocode(lawdCd, pt, buildingName, umdNm);
     } catch (DataIntegrityViolationException dup) {
       // another worker already cached it — fine
     } catch (RuntimeException e) {
@@ -76,6 +62,41 @@ public class MapGeocodeWorker {
     } finally {
       inFlight.remove(key);
     }
+  }
+
+  /**
+   * Synchronous warm: geocode one building now, in its own transaction. Returns true if a usable
+   * coordinate was cached (or already present). Transient errors (Kakao quota/network) propagate so
+   * the caller (warm job) can back off — they stay un-cached and retry later.
+   */
+  @Transactional
+  public boolean geocodeSync(String lawdCd, PropertyType pt, String buildingName, String umdNm) {
+    try {
+      return doGeocode(lawdCd, pt, buildingName, umdNm);
+    } catch (DataIntegrityViolationException dup) {
+      return true; // already cached by a concurrent worker
+    }
+  }
+
+  /**
+   * Core: one Kakao call + cache write. SUCCESS only if the geocoded address is actually in the
+   * expected 시군구 (its address contains the region's 구/시/군 token) — guards same-name complexes
+   * in another 구 without a second call. A genuine no-result / wrong-시군구 caches FAILED (don't
+   * retry forever); a transient RuntimeException propagates uncached so it retries later.
+   */
+  private boolean doGeocode(String lawdCd, PropertyType pt, String buildingName, String umdNm) {
+    String query = (umdNm == null ? "" : umdNm + " ") + buildingName;
+    GeoPlace gp = kakao.geocodePlace(query); // RestClientException on quota/network (transient)
+    boolean ok = gp != null && inExpectedSigungu(lawdCd, gp.addressName());
+    repo.save(
+        new ComplexGeocode(
+            lawdCd,
+            pt,
+            buildingName,
+            ok ? gp.lat() : null,
+            ok ? gp.lng() : null,
+            ok ? GeocodeStatus.SUCCESS : GeocodeStatus.FAILED));
+    return ok;
   }
 
   /** True if the geocoded address contains the region's 구/시/군 token (single-call validation). */
