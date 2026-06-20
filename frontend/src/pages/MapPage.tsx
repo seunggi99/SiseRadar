@@ -5,7 +5,6 @@ import type { Bounds, MapComplex, MapComplexChange, MapRegion, TradeType } from 
 import { Header } from '../components/Header';
 import { PropertyTradeSelector } from '../components/PropertyTradeSelector';
 import { RadarSpinner } from '../components/RadarSpinner';
-import { RegionSearch } from '../components/RegionSearch';
 import { useFilters } from '../lib/filters';
 import { isInKorea, loadKakao, restrictToKorea } from '../lib/kakaoMap';
 import {
@@ -186,7 +185,7 @@ function paddedBounds(map: any): Bounds {
 }
 
 export function MapPage() {
-  const { lawdCd, propertyType, tradeType, from, to, band, setLawdCd, setProperty, setTradeType } =
+  const { propertyType, tradeType, from, to, band, setLawdCd, setProperty, setTradeType } =
     useFilters();
   const mapRef = useRef<HTMLDivElement>(null);
   const kakaoRef = useRef<any>(null);
@@ -436,17 +435,6 @@ export function MapPage() {
     });
   }, [regionData, ready, showBubbles, tradeType, setLawdCd, colorMode]);
 
-  // 검색 점프(보조): 지역 선택 + 좌표를 알면 그 지역으로 패닝·줌인.
-  const onJump = (jumpLawdCd: string) => {
-    setLawdCd(jumpLawdCd);
-    const kakao = kakaoRef.current;
-    const r = regionData.find((x) => x.lawdCd === jumpLawdCd);
-    if (kakao && mapObj.current && r) {
-      mapObj.current.setCenter(new kakao.maps.LatLng(r.lat, r.lng));
-      mapObj.current.setLevel(MARKER_ZOOM);
-    }
-  };
-
   const thresholds = scaleThresholds(tradeType);
   const unitLabel = tradeType === 'RENT' ? '보증금 ㎡당' : '평당가(전용)';
   const markerTxSum = markerData.reduce((s, c) => s + c.count, 0);
@@ -470,11 +458,8 @@ export function MapPage() {
     <div className="min-h-screen">
       <Header />
       <main className="mx-auto max-w-6xl px-5 py-6">
-        <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-          <div className="flex flex-col gap-1">
-            <span className="sr-label">지도</span>
-            <h1 className="text-xl font-medium tracking-tight">{regionName(lawdCd)}</h1>
-          </div>
+        <div className="mb-4 flex flex-wrap items-center justify-end gap-2">
+          {/* 검색·상단 지역명 제거: 지도는 보는 곳(뷰포트) 기준으로 정보를 제공한다 */}
           <div className="flex flex-wrap items-center gap-2">
             {/* 색 인코딩 모드: 시세(teal) ↔ 상승률(빨강/파랑) — 버블·마커 모두 적용 */}
             <div className="inline-flex overflow-hidden rounded-md" style={{ border: '0.5px solid var(--sr-border)' }}>
@@ -501,7 +486,6 @@ export function MapPage() {
               onTradeChange={setTradeType}
               allowedTypes={mappableTypes()}
             />
-            <RegionSearch onSelect={(r) => onJump(r.lawdCd)} />
           </div>
         </div>
 
