@@ -8,9 +8,10 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -35,9 +36,13 @@ public class InternalCollectionController {
   }
 
   @PostMapping("/geocode")
-  @Operation(summary = "한 지역의 모든 주거 단지를 일괄 지오코딩(캐시 워밍)한다 — 멱등")
-  public Map<String, Integer> geocode(@RequestParam String lawdCd) {
-    return mapService.warmRegion(lawdCd);
+  @Operation(summary = "한 지역의 주거 단지를 일괄 지오코딩(캐시 워밍)한다 — 멱등, 스로틀 시 429")
+  public ResponseEntity<MapService.WarmResult> geocode(@RequestParam String lawdCd) {
+    MapService.WarmResult r = mapService.warmRegion(lawdCd);
+    // 스로틀/쿼터로 중단되면 429 → 드라이버가 멈추고 "어디까지" 보고 후 resume.
+    return r.throttled()
+        ? ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).body(r)
+        : ResponseEntity.ok(r);
   }
 
   @PostMapping("/collect")

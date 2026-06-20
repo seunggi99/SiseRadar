@@ -65,6 +65,20 @@ public class MapService {
 
   private final Map<String, CachedRegions> regionsCache = new ConcurrentHashMap<>();
 
+  // ── 지오코딩 워밍 페이싱(버스트 스로틀 회피용; 보수적 시작, 필요시 조정) ──────────────────
+  /** Kakao 호출 간 최소 간격(ms) — 버스트 레이트 스로틀을 안 건드리게(~3-4 QPS). */
+  private static final long GEOCODE_DELAY_MS = 150;
+  /** 한 건물의 일시오류(429/5xx/네트워크) 시 지수 백오프 재시도 횟수. */
+  private static final int GEOCODE_MAX_RETRIES = 4;
+  /** 일시오류가 연속 이만큼 발생하면 스로틀/쿼터로 판단해 깔끔히 중단(429). */
+  private static final int THROTTLE_STOP_STREAK = 8;
+  /** 한 HTTP 호출이 처리하는 신규 건물 상한 — 요청이 너무 길어 프록시 타임아웃 나는 걸 방지(멱등 재호출로 이어감). */
+  private static final int WARM_MAX_PER_CALL = 300;
+
+  /** 한 번의 warmRegion 호출 결과. {@code throttled}면 드라이버가 멈추고 resume. */
+  public record WarmResult(
+      int success, int failed, int skipped, int attempted, boolean throttled, String stoppedAt) {}
+
   private final RealEstateTransactionRepository trades;
   private final ComplexGeocodeRepository geocodes;
   private final RegionCentroidRepository centroids;
@@ -101,10 +115,12 @@ public class MapService {
    * buildings are skipped, so re-runs resume. A transient Kakao error propagates (warm job backs
    * off) leaving the rest uncached. Returns {attempted, success, skipped}.
    */
-  public Map<String, Integer> warmRegion(String lawdCd) {
-    int attempted = 0;
+  public WarmResult warmRegion(String lawdCd) {
     int success = 0;
+    int failed = 0;
     int skipped = 0;
+    int attempted = 0;
+    int transientStreak = 0; // 연속 일시오류 — THROTTLE_STOP_STREAK 도달 시 스로틀로 판단
     for (PropertyType pt : MARKER_TYPES) {
       Set<String> cached =
           geocodes.findByLawdCdAndPropertyType(lawdCd, pt).stream()
@@ -115,13 +131,60 @@ public class MapService {
           skipped++;
           continue;
         }
-        attempted++;
-        if (worker.geocodeSync(lawdCd, pt, b.getBuildingName(), b.getUmdNm())) {
-          success++;
+        if (attempted >= WARM_MAX_PER_CALL) {
+          // 이 호출 몫 소진 — 멱등이라 드라이버가 같은 지역을 다시 부르면 이어서 채운다.
+          return new WarmResult(success, failed, skipped, attempted, false, null);
         }
+        attempted++;
+        Boolean ok = geocodeWithRetry(lawdCd, pt, b.getBuildingName(), b.getUmdNm());
+        if (ok == null) {
+          // 재시도 후에도 일시오류 → 스로틀 의심
+          if (++transientStreak >= THROTTLE_STOP_STREAK) {
+            log.warn("지오코딩 워밍 스로틀 감지 — {} {}에서 중단", lawdCd, pt);
+            return new WarmResult(
+                success, failed, skipped, attempted, true, lawdCd + "/" + pt + "/" + b.getBuildingName());
+          }
+        } else {
+          transientStreak = 0; // 성공/실패(무결과) 둘 다 스로틀 아님 → 스트릭 리셋
+          if (ok) {
+            success++;
+          } else {
+            failed++;
+          }
+        }
+        sleepQuietly(GEOCODE_DELAY_MS);
       }
     }
-    return Map.of("attempted", attempted, "success", success, "skipped", skipped);
+    return new WarmResult(success, failed, skipped, attempted, false, null);
+  }
+
+  /**
+   * One building with exponential-backoff retry on transient (Kakao 429/5xx/network) errors.
+   * Returns true=SUCCESS, false=FAILED(무결과/시군구 불일치 — 정상 마킹), null=일시오류가 재시도
+   * 후에도 지속(미캐시, 스로틀 신호).
+   */
+  private Boolean geocodeWithRetry(String lawdCd, PropertyType pt, String bn, String umd) {
+    long backoff = 400;
+    for (int attempt = 0; attempt <= GEOCODE_MAX_RETRIES; attempt++) {
+      try {
+        return worker.geocodeSync(lawdCd, pt, bn, umd);
+      } catch (RuntimeException transientErr) {
+        if (attempt == GEOCODE_MAX_RETRIES) {
+          return null;
+        }
+        sleepQuietly(backoff);
+        backoff = Math.min(backoff * 2, 5000);
+      }
+    }
+    return null;
+  }
+
+  private static void sleepQuietly(long ms) {
+    try {
+      Thread.sleep(ms);
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+    }
   }
 
   /**
