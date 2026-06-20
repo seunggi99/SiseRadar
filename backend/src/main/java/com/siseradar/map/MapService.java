@@ -72,8 +72,9 @@ public class MapService {
   private static final int GEOCODE_MAX_RETRIES = 4;
   /** 일시오류가 연속 이만큼 발생하면 스로틀/쿼터로 판단해 깔끔히 중단(429). */
   private static final int THROTTLE_STOP_STREAK = 8;
-  /** 한 HTTP 호출이 처리하는 신규 건물 상한 — 요청이 너무 길어 프록시 타임아웃 나는 걸 방지(멱등 재호출로 이어감). */
-  private static final int WARM_MAX_PER_CALL = 300;
+  /** 한 HTTP 호출이 처리하는 신규 건물 상한 — 요청이 너무 길어 프록시 타임아웃 나는 걸 방지(멱등 재호출로 이어감).
+   *  100이면 일시오류 백오프가 겹쳐도 한 호출 ~수십 초라 290s 타임아웃 안전. */
+  private static final int WARM_MAX_PER_CALL = 100;
 
   /** 한 번의 warmRegion 호출 결과. {@code throttled}면 드라이버가 멈추고 resume. */
   public record WarmResult(
