@@ -1,5 +1,6 @@
 package com.siseradar.collect;
 
+import com.siseradar.map.MapService;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.ArrayList;
@@ -21,11 +22,13 @@ public class CollectionScheduler {
 
   private final TradeCollectionService collectionService;
   private final CollectionProperties props;
+  private final MapService mapService;
 
   public CollectionScheduler(
-      TradeCollectionService collectionService, CollectionProperties props) {
+      TradeCollectionService collectionService, CollectionProperties props, MapService mapService) {
     this.collectionService = collectionService;
     this.props = props;
+    this.mapService = mapService;
   }
 
   @Scheduled(cron = "${siseradar.collection.cron:0 0 4 * * *}")
@@ -45,6 +48,8 @@ public class CollectionScheduler {
         }
       }
     }
+    // 수집 직후 지도 버블 캐시를 미리 채워, 다음 첫 방문자도 즉시(무거운 집계 cache-miss 없이).
+    mapService.warmRegionsCache();
   }
 
   /** YYYYMM strings for the current month and the previous (recentMonths - 1) months. */

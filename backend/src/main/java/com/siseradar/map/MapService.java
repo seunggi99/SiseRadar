@@ -24,6 +24,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 /**
@@ -49,8 +51,15 @@ public class MapService {
   private static final Set<PropertyType> MARKER_TYPES =
       EnumSet.of(PropertyType.APT, PropertyType.OFFICETEL, PropertyType.ROW_HOUSE);
 
-  /** Region-bubble aggregates change only on new collection → short-TTL cache (5.7s query → instant). */
-  private static final long REGIONS_TTL_MS = 10 * 60 * 1000L;
+  private static final Logger log = LoggerFactory.getLogger(MapService.class);
+
+  /**
+   * Region-bubble aggregates (the heavy ~6s query) change only on new collection. Cache them with a
+   * TTL slightly longer than the daily collection cycle (~25h) as a safety net — they're normally
+   * refreshed by post-collection warming, so this only catches a missed warm. Key = (type, trade,
+   * from, to, band); bbox-independent, so the UI's default combos are a small finite set.
+   */
+  private static final long REGIONS_TTL_MS = 25L * 60 * 60 * 1000L;
 
   private record CachedRegions(long at, List<MapRegionResponse> data) {}
 
@@ -250,7 +259,7 @@ public class MapService {
    */
   public List<MapRegionResponse> regions(
       PropertyType pt, TradeType tt, String from, String to, String band) {
-    String cacheKey = pt + "|" + tt + "|" + from + "|" + to + "|" + band;
+    String cacheKey = regionsKey(pt, tt, from, to, band);
     CachedRegions hit = regionsCache.get(cacheKey);
     long now = System.currentTimeMillis();
     if (hit != null && now - hit.at() < REGIONS_TTL_MS) {
@@ -259,6 +268,39 @@ public class MapService {
     List<MapRegionResponse> out = computeRegions(pt, tt, from, to, band);
     regionsCache.put(cacheKey, new CachedRegions(now, out));
     return out;
+  }
+
+  private static String regionsKey(
+      PropertyType pt, TradeType tt, String from, String to, String band) {
+    return pt + "|" + tt + "|" + from + "|" + to + "|" + band;
+  }
+
+  /**
+   * Pre-compute the UI's region-bubble combos (마커 유형 × 매매/전월세, 전체 기간) into the cache so
+   * even the first visitor after a collection gets bubbles instantly. ~6 aggregates, once per day
+   * (after the scheduler). Per-combo failure is logged and skipped (next request recomputes lazily).
+   */
+  public void warmRegionsCache() {
+    int warmed = 0;
+    for (PropertyType pt : MARKER_TYPES) {
+      for (TradeType tt : TradeType.values()) {
+        try {
+          regionsCache.put(
+              regionsKey(pt, tt, null, null, null),
+              new CachedRegions(System.currentTimeMillis(), computeRegions(pt, tt, null, null, null)));
+          warmed++;
+        } catch (RuntimeException e) {
+          log.warn("region-bubble 캐시 워밍 실패 {} {}: {}", pt, tt, e.getMessage());
+        }
+      }
+    }
+    log.info("region-bubble 캐시 워밍 완료: {}개 조합", warmed);
+  }
+
+  /** Drop cached region bubbles for a (type, trade) so new transactions show on the next request. */
+  public void invalidateRegions(PropertyType pt, TradeType tt) {
+    String prefix = pt + "|" + tt + "|";
+    regionsCache.keySet().removeIf(k -> k.startsWith(prefix));
   }
 
   private List<MapRegionResponse> computeRegions(

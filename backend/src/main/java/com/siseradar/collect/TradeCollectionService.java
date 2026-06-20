@@ -5,6 +5,7 @@ import com.siseradar.collect.dto.RtmsApiResponse;
 import com.siseradar.domain.PropertyType;
 import com.siseradar.domain.RealEstateTransaction;
 import com.siseradar.domain.TradeType;
+import com.siseradar.map.MapService;
 import com.siseradar.repository.RealEstateTransactionRepository;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -31,16 +32,19 @@ public class TradeCollectionService {
   private final RealEstateTransactionRepository repository;
   private final CollectionProperties props;
   private final AlertEvaluationService alertEvaluation;
+  private final MapService mapService;
 
   public TradeCollectionService(
       DataGoKrClient client,
       RealEstateTransactionRepository repository,
       CollectionProperties props,
-      AlertEvaluationService alertEvaluation) {
+      AlertEvaluationService alertEvaluation,
+      MapService mapService) {
     this.client = client;
     this.repository = repository;
     this.props = props;
     this.alertEvaluation = alertEvaluation;
+    this.mapService = mapService;
   }
 
   public record Result(
@@ -97,6 +101,11 @@ public class TradeCollectionService {
     }
 
     repository.saveAll(toInsert);
+
+    // 새 행이 들어왔으면 그 (유형·거래)의 지도 버블 캐시를 무효화 — 백필 중에도 버블이 신선.
+    if (!toInsert.isEmpty()) {
+      mapService.invalidateRegions(propertyType, tradeType);
+    }
 
     try {
       alertEvaluation.evaluate(lawdCd, dealYmd, propertyType, tradeType, toInsert);
