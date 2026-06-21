@@ -1,6 +1,7 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client';
-import { useMapComplexesInBounds, useMapRegions } from '../api/hooks';
+import { MAP_COMPLEXES_KEY, useMapComplexesInBounds, useMapRegions } from '../api/hooks';
 import type { Bounds, MapComplex, MapComplexChange, MapRegion, TradeType } from '../api/types';
 import { Header } from '../components/Header';
 import { PropertyTradeSelector } from '../components/PropertyTradeSelector';
@@ -201,6 +202,7 @@ export function MapPage() {
   const markersByKey = useRef<Map<string, any>>(new Map());
   const lastFilterKey = useRef<string>('');
   const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const queryClient = useQueryClient();
   const [ready, setReady] = useState(false);
   const [error, setError] = useState(false);
   const [level, setLevel] = useState(6);
@@ -286,6 +288,9 @@ export function MapPage() {
         kakao.maps.event.addListener(map, 'idle', () => {
           if (idleTimer.current) clearTimeout(idleTimer.current);
           idleTimer.current = setTimeout(() => {
+            // 새 bbox로 가기 전에 이전 in-flight 마커 요청을 명시적으로 취소 → client-side abort.
+            // (TanStack은 키가 '바뀔' 때 이전 fetch를 자동 abort하지 않으므로 직접 취소해야 503·경합 제거.)
+            queryClient.cancelQueries({ queryKey: [MAP_COMPLEXES_KEY], exact: false });
             setLevel(map.getLevel());
             setBounds(paddedBounds(map));
           }, IDLE_DEBOUNCE_MS);
@@ -309,7 +314,7 @@ export function MapPage() {
       cancelled = true;
       if (idleTimer.current) clearTimeout(idleTimer.current);
     };
-  }, [setLawdCd]);
+  }, [setLawdCd, queryClient]);
 
   // 단지 마커: 안정 키(lawdCd|건물명) 기반 incremental diff. 같은 tier에서 팬하면 화면에
   // 남는 마커는 건드리지 않고(깜빡임 없음), 새 키만 추가·나간 키만 제거.

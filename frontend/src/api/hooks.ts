@@ -90,6 +90,9 @@ export function useMapComplexes(
   });
 }
 
+/** 뷰포트 마커 쿼리 키 프리픽스 — 팬 시 이전 in-flight 취소(cancelQueries)에도 같은 값 사용. */
+export const MAP_COMPLEXES_KEY = 'mapComplexesBbox';
+
 /** High-zoom markers for the current viewport bbox. Lazy geocoding fills in over a few polls. */
 export function useMapComplexesInBounds(
   bounds: Bounds | null,
@@ -102,7 +105,7 @@ export function useMapComplexesInBounds(
 ) {
   return useQuery({
     // bounds는 paddedBounds에서 소수 3자리로 양자화됨 → 미세 jitter가 키를 안 바꿔 동일 뷰포트 dedup.
-    queryKey: ['mapComplexesBbox', bounds, propertyType, tradeType, from, to, band],
+    queryKey: [MAP_COMPLEXES_KEY, bounds, propertyType, tradeType, from, to, band],
     // signal: bbox(키)가 바뀌면 TanStack이 이전 요청을 abort → out-of-order stale 덮어쓰기 제거.
     queryFn: ({ signal }) =>
       api.map.complexesInBounds(bounds!, propertyType, tradeType, from, to, band, signal),
