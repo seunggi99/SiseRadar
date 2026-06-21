@@ -44,8 +44,6 @@ public class MapService {
   private static final int GEOCODE_CAP = 25;
   /** Max region centroids to geocode per /regions request (one-time, tiny). */
   private static final int CENTROID_CAP = 10;
-  /** Max regions a single bbox request will pull complexes for. */
-  private static final int BBOX_REGION_CAP = 12;
 
   /** Only these types get individual markers (geocodable building names). */
   private static final Set<PropertyType> MARKER_TYPES =
@@ -85,18 +83,21 @@ public class MapService {
   private final RegionCentroidRepository centroids;
   private final MapGeocodeWorker worker;
   private final RegionCentroidWorker centroidWorker;
+  private final MapDiscovery discovery;
 
   public MapService(
       RealEstateTransactionRepository trades,
       ComplexGeocodeRepository geocodes,
       RegionCentroidRepository centroids,
       MapGeocodeWorker worker,
-      RegionCentroidWorker centroidWorker) {
+      RegionCentroidWorker centroidWorker,
+      MapDiscovery discovery) {
     this.trades = trades;
     this.geocodes = geocodes;
     this.centroids = centroids;
     this.worker = worker;
     this.centroidWorker = centroidWorker;
+    this.discovery = discovery;
   }
 
   /** Markers for one region (legacy/explicit path). */
@@ -242,37 +243,10 @@ public class MapService {
               markerChangePct(r)));
     }
 
-    // discovery: queue lazy geocoding for not-yet-cached complexes of overlapping regions
-    int[] budget = {0};
-    int count = 0;
-    for (RegionCentroid rc : centroids.findInBounds(swLat, neLat, swLng, neLng)) {
-      if (count++ >= BBOX_REGION_CAP || budget[0] >= GEOCODE_CAP) {
-        break;
-      }
-      triggerGeocoding(rc.getLawdCd(), pt, tt, fromYm, toYm, bandFilter, budget);
-    }
+    // 미캐시 단지 lazy 지오코딩 'discovery'는 비동기로 분리 — markers 응답 경로를 막지 않는다.
+    // (워밍 완료로 새로 큐잉할 게 거의 없고, 가벼운 distinctBuildings로 검사하므로 백그라운드 부담도 작다.)
+    discovery.discover(swLat, swLng, neLat, neLng, pt);
     return out;
-  }
-
-  /** Queue background geocoding for a region's not-yet-cached buildings (capped, in-flight dedup). */
-  private void triggerGeocoding(
-      String lawdCd, PropertyType pt, TradeType tt, String from, String to, String band, int[] launched) {
-    Map<String, ComplexGeocode> cache =
-        geocodes.findByLawdCdAndPropertyType(lawdCd, pt).stream()
-            .collect(Collectors.toMap(ComplexGeocode::getBuildingName, g -> g, (a, b) -> a));
-    for (MapComplexStatRow row : trades.mapComplexStats(lawdCd, pt.name(), tt.name(), from, to, band)) {
-      if (launched[0] >= GEOCODE_CAP) {
-        break;
-      }
-      if (cache.containsKey(row.getBuildingName())) {
-        continue; // already SUCCESS/PENDING/FAILED — don't re-queue
-      }
-      String key = MapGeocodeWorker.key(lawdCd, pt, row.getBuildingName());
-      if (worker.claim(key)) {
-        worker.geocode(lawdCd, pt, row.getBuildingName(), row.getUmdNm(), key);
-        launched[0]++;
-      }
-    }
   }
 
   /**
