@@ -37,8 +37,11 @@ public class InternalCollectionController {
 
   @PostMapping("/geocode")
   @Operation(summary = "한 지역의 주거 단지를 일괄 지오코딩(캐시 워밍)한다 — 멱등, 스로틀 시 429")
-  public ResponseEntity<MapService.WarmResult> geocode(@RequestParam String lawdCd) {
-    MapService.WarmResult r = mapService.warmRegion(lawdCd);
+  public ResponseEntity<MapService.WarmResult> geocode(
+      @RequestParam String lawdCd,
+      @RequestParam(required = false, defaultValue = "false") boolean retryFailed) {
+    // retryFailed=true면 기존 FAILED 단지도 주소 폴백으로 재시도(SUCCESS는 그대로 skip).
+    MapService.WarmResult r = mapService.warmRegion(lawdCd, retryFailed);
     // 스로틀/쿼터로 중단되면 429 → 드라이버가 멈추고 "어디까지" 보고 후 resume.
     return r.throttled()
         ? ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).body(r)

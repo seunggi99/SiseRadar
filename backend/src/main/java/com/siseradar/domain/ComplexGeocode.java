@@ -69,6 +69,14 @@ public class ComplexGeocode {
     this.updatedAt = Instant.now();
   }
 
+  /** Re-geocode an existing cache row in place (예: FAILED → 주소 폴백으로 SUCCESS). */
+  public void refresh(Double lat, Double lng, GeocodeStatus status) {
+    this.lat = lat;
+    this.lng = lng;
+    this.status = status;
+    this.updatedAt = Instant.now();
+  }
+
   public Long getId() {
     return id;
   }

@@ -53,7 +53,8 @@ public class MapGeocodeWorker {
   public void geocode(
       String lawdCd, PropertyType pt, String buildingName, String umdNm, String key) {
     try {
-      doGeocode(lawdCd, pt, buildingName, umdNm);
+      // lazy 경로: 지번 없이 단지명 키워드만(기존 동작). 주소 폴백은 지번 보유한 warm 경로에서.
+      doGeocode(lawdCd, pt, buildingName, umdNm, null, false);
     } catch (DataIntegrityViolationException dup) {
       // another worker already cached it — fine
     } catch (RuntimeException e) {
@@ -66,37 +67,71 @@ public class MapGeocodeWorker {
 
   /**
    * Synchronous warm: geocode one building now, in its own transaction. Returns true if a usable
-   * coordinate was cached (or already present). Transient errors (Kakao quota/network) propagate so
-   * the caller (warm job) can back off — they stay un-cached and retry later.
+   * coordinate was cached. {@code jibun} enables the 주소 폴백; {@code addressOnly}=true skips the
+   * 단지명 키워드 1차(이미 FAILED인 단지 재시도용 — 주소 검색만). Transient errors propagate so the
+   * warm job can back off.
    */
   @Transactional
-  public boolean geocodeSync(String lawdCd, PropertyType pt, String buildingName, String umdNm) {
+  public boolean geocodeSync(
+      String lawdCd,
+      PropertyType pt,
+      String buildingName,
+      String umdNm,
+      String jibun,
+      boolean addressOnly) {
     try {
-      return doGeocode(lawdCd, pt, buildingName, umdNm);
+      return doGeocode(lawdCd, pt, buildingName, umdNm, jibun, addressOnly);
     } catch (DataIntegrityViolationException dup) {
       return true; // already cached by a concurrent worker
     }
   }
 
   /**
-   * Core: one Kakao call + cache write. SUCCESS only if the geocoded address is actually in the
-   * expected 시군구 (its address contains the region's 구/시/군 token) — guards same-name complexes
-   * in another 구 without a second call. A genuine no-result / wrong-시군구 caches FAILED (don't
-   * retry forever); a transient RuntimeException propagates uncached so it retries later.
+   * 2단계 지오코딩 + 캐시 upsert.
+   * <ul>
+   *   <li>1차(addressOnly=false): 단지명 키워드 검색(기존 로직 그대로).
+   *   <li>2차 폴백: 1차가 무결과/시군구 불일치면 "시군구+법정동+지번" 주소 검색. 철거·개명 단지도
+   *       필지(지번)는 살아있어 위치가 잡힘.
+   * </ul>
+   * 시군구 검증(inExpectedSigungu)은 두 결과 모두에 동일 적용. 둘 다 실패면 FAILED. 기존 캐시
+   * 행이 있으면 in-place update(재워밍). transient는 propagate(미캐시 → 나중 재시도).
    */
-  private boolean doGeocode(String lawdCd, PropertyType pt, String buildingName, String umdNm) {
-    String query = (umdNm == null ? "" : umdNm + " ") + buildingName;
-    GeoPlace gp = kakao.geocodePlace(query); // RestClientException on quota/network (transient)
-    boolean ok = gp != null && inExpectedSigungu(lawdCd, gp.addressName());
-    repo.save(
-        new ComplexGeocode(
-            lawdCd,
-            pt,
-            buildingName,
-            ok ? gp.lat() : null,
-            ok ? gp.lng() : null,
-            ok ? GeocodeStatus.SUCCESS : GeocodeStatus.FAILED));
+  private boolean doGeocode(
+      String lawdCd, PropertyType pt, String buildingName, String umdNm, String jibun, boolean addressOnly) {
+    GeoPlace gp = null;
+    if (!addressOnly) {
+      String query = (umdNm == null ? "" : umdNm + " ") + buildingName;
+      GeoPlace kw = kakao.geocodePlace(query); // RestClientException on quota/network → propagate
+      if (kw != null && inExpectedSigungu(lawdCd, kw.addressName())) {
+        gp = kw;
+      }
+    }
+    if (gp == null && umdNm != null && jibun != null && !jibun.isBlank()) {
+      String addr = koreaRegions.sigunguToken(lawdCd) + " " + umdNm + " " + jibun;
+      GeoPlace ad = kakao.geocodeAddressPlace(addr);
+      if (ad != null && inExpectedSigungu(lawdCd, ad.addressName())) {
+        gp = ad;
+      }
+    }
+    boolean ok = gp != null;
+    upsert(
+        lawdCd, pt, buildingName,
+        ok ? gp.lat() : null, ok ? gp.lng() : null,
+        ok ? GeocodeStatus.SUCCESS : GeocodeStatus.FAILED);
     return ok;
+  }
+
+  /** Upsert the geocode cache row — update in place if it exists(재워밍), else insert. */
+  private void upsert(
+      String lawdCd, PropertyType pt, String buildingName, Double lat, Double lng, GeocodeStatus status) {
+    ComplexGeocode row =
+        repo.findByLawdCdAndPropertyTypeAndBuildingName(lawdCd, pt, buildingName).orElse(null);
+    if (row != null) {
+      row.refresh(lat, lng, status);
+    } else {
+      row = new ComplexGeocode(lawdCd, pt, buildingName, lat, lng, status);
+    }
+    repo.save(row);
   }
 
   /** True if the geocoded address contains the region's 구/시/군 token (single-call validation). */

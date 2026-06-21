@@ -116,28 +116,40 @@ public class MapService {
    * buildings are skipped, so re-runs resume. A transient Kakao error propagates (warm job backs
    * off) leaving the rest uncached. Returns {attempted, success, skipped}.
    */
-  public WarmResult warmRegion(String lawdCd) {
+  public WarmResult warmRegion(String lawdCd, boolean retryFailed) {
     int success = 0;
     int failed = 0;
     int skipped = 0;
     int attempted = 0;
     int transientStreak = 0; // 연속 일시오류 — THROTTLE_STOP_STREAK 도달 시 스로틀로 판단
     for (PropertyType pt : MARKER_TYPES) {
-      Set<String> cached =
+      Map<String, GeocodeStatus> cached =
           geocodes.findByLawdCdAndPropertyType(lawdCd, pt).stream()
-              .map(ComplexGeocode::getBuildingName)
-              .collect(Collectors.toSet());
+              .collect(
+                  Collectors.toMap(
+                      ComplexGeocode::getBuildingName, ComplexGeocode::getStatus, (a, b) -> a));
       for (BuildingRow b : trades.distinctBuildings(lawdCd, pt.name())) {
-        if (cached.contains(b.getBuildingName())) {
-          skipped++;
+        GeocodeStatus st = cached.get(b.getBuildingName());
+        boolean addressOnly;
+        if (st == GeocodeStatus.SUCCESS) {
+          skipped++; // 이미 좌표 있음 — 절대 재지오코딩 안 함(멱등)
           continue;
+        } else if (st == GeocodeStatus.FAILED) {
+          if (!retryFailed) {
+            skipped++; // 기본: FAILED는 terminal로 skip
+            continue;
+          }
+          addressOnly = true; // 재시도: 단지명 키워드는 이미 실패 → 주소 폴백만
+        } else {
+          addressOnly = false; // 신규/PENDING: 키워드→주소 2단계
         }
         if (attempted >= WARM_MAX_PER_CALL) {
           // 이 호출 몫 소진 — 멱등이라 드라이버가 같은 지역을 다시 부르면 이어서 채운다.
           return new WarmResult(success, failed, skipped, attempted, false, null);
         }
         attempted++;
-        Boolean ok = geocodeWithRetry(lawdCd, pt, b.getBuildingName(), b.getUmdNm());
+        Boolean ok =
+            geocodeWithRetry(lawdCd, pt, b.getBuildingName(), b.getUmdNm(), b.getJibun(), addressOnly);
         if (ok == null) {
           // 재시도 후에도 일시오류 → 스로틀 의심
           if (++transientStreak >= THROTTLE_STOP_STREAK) {
@@ -164,11 +176,12 @@ public class MapService {
    * Returns true=SUCCESS, false=FAILED(무결과/시군구 불일치 — 정상 마킹), null=일시오류가 재시도
    * 후에도 지속(미캐시, 스로틀 신호).
    */
-  private Boolean geocodeWithRetry(String lawdCd, PropertyType pt, String bn, String umd) {
+  private Boolean geocodeWithRetry(
+      String lawdCd, PropertyType pt, String bn, String umd, String jibun, boolean addressOnly) {
     long backoff = 400;
     for (int attempt = 0; attempt <= GEOCODE_MAX_RETRIES; attempt++) {
       try {
-        return worker.geocodeSync(lawdCd, pt, bn, umd);
+        return worker.geocodeSync(lawdCd, pt, bn, umd, jibun, addressOnly);
       } catch (RuntimeException transientErr) {
         if (attempt == GEOCODE_MAX_RETRIES) {
           return null;

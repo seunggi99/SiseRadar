@@ -106,6 +106,23 @@ public class KakaoClient {
   }
 
   /**
+   * Forward geocode via ADDRESS search (법정동+지번) → coordinate + matched address, or null. The
+   * fallback for buildings whose 단지명 keyword search fails; address search resolves a 지번 even for
+   * demolished/renamed complexes. Returns the address string so the caller can validate the 시군구.
+   */
+  public GeoPlace geocodeAddressPlace(String query) {
+    Place p = firstPlace("https://dapi.kakao.com/v2/local/search/address.json?size=1&query=", query);
+    if (p == null) {
+      return null;
+    }
+    try {
+      return new GeoPlace(Double.parseDouble(p.y), Double.parseDouble(p.x), p.addressName);
+    } catch (NumberFormatException e) {
+      return null;
+    }
+  }
+
+  /**
    * First document from a Kakao search endpoint, or null when the lookup genuinely has no result.
    * Transient HTTP errors (quota exceeded, network) propagate as {@link RestClientException} so the
    * caller can avoid caching a permanent failure for a temporary problem.

@@ -427,7 +427,7 @@ public interface RealEstateTransactionRepository extends JpaRepository<RealEstat
   @Query(
       value =
           """
-          SELECT t.building_name AS buildingName, MAX(t.umd_nm) AS umdNm
+          SELECT t.building_name AS buildingName, MAX(t.umd_nm) AS umdNm, MAX(t.jibun) AS jibun
           FROM real_estate_transaction t
           WHERE t.lawd_cd = :lawdCd AND t.property_type = :pt AND t.building_name IS NOT NULL
           GROUP BY t.building_name
