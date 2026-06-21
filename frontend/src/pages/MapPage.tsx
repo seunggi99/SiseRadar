@@ -29,6 +29,10 @@ const LABEL_ZOOM = 3;
 const CLUSTER_MIN = 5;
 // 범례 색칩 폭(px) — 경계 라벨("4,000")보다 넓어 라벨이 겹치지 않는다.
 const SWATCH_W = 38;
+// 팬/줌 정착 후 마커 패치까지 디바운스(ms) — 한 번 정착 = 한 번만 갱신.
+const IDLE_DEBOUNCE_MS = 300;
+// bbox 양자화(소수 자릿수) — 미세 jitter로 queryKey가 매번 달라져 중복 발사되는 것 방지.
+const BBOX_QUANT = 1000; // 3 decimals
 
 /** 색 인코딩 모드: 시세(평당가 수준 teal) ↔ 상승률(1년 변동률 diverging). */
 type ColorMode = 'price' | 'change';
@@ -175,7 +179,7 @@ function paddedBounds(map: any): Bounds {
   const latSpan = ne.getLat() - sw.getLat();
   const lngSpan = ne.getLng() - sw.getLng();
   const pad = 0.5;
-  const round = (n: number) => Math.round(n * 1000) / 1000;
+  const round = (n: number) => Math.round(n * BBOX_QUANT) / BBOX_QUANT;
   return {
     swLat: round(sw.getLat() - latSpan * pad),
     swLng: round(sw.getLng() - lngSpan * pad),
@@ -284,7 +288,7 @@ export function MapPage() {
           idleTimer.current = setTimeout(() => {
             setLevel(map.getLevel());
             setBounds(paddedBounds(map));
-          }, 350);
+          }, IDLE_DEBOUNCE_MS);
         });
         kakao.maps.event.addListener(map, 'click', async (e: any) => {
           overlay.current?.setMap(null);

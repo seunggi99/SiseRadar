@@ -54,7 +54,7 @@ type Params = Record<string, string | number | undefined | null>;
 async function request<T>(
   method: string,
   path: string,
-  opts: { params?: Params; body?: unknown } = {},
+  opts: { params?: Params; body?: unknown; signal?: AbortSignal } = {},
 ): Promise<T> {
   const url = new URL(path, BASE_URL);
   for (const [key, value] of Object.entries(opts.params ?? {})) {
@@ -72,7 +72,7 @@ async function request<T>(
     body = JSON.stringify(opts.body);
   }
 
-  const res = await fetch(url.toString(), { method, headers, body });
+  const res = await fetch(url.toString(), { method, headers, body, signal: opts.signal });
 
   // A rejected token on a protected call means our session is stale — log out.
   if ((res.status === 401 || res.status === 403) && !path.startsWith('/api/auth')) {
@@ -172,6 +172,7 @@ export const api = {
       from?: string,
       to?: string,
       band?: string,
+      signal?: AbortSignal,
     ) =>
       request<MapComplex[]>('GET', '/api/map/complexes', {
         params: {
@@ -185,6 +186,7 @@ export const api = {
           to,
           band,
         },
+        signal, // bbox(키) 바뀌면 TanStack이 이전 in-flight를 abort → stale 덮어쓰기 제거
       }),
     regions: (
       propertyType: PropertyType,

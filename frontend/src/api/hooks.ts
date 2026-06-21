@@ -101,14 +101,16 @@ export function useMapComplexesInBounds(
   enabled: boolean,
 ) {
   return useQuery({
+    // bounds는 paddedBounds에서 소수 3자리로 양자화됨 → 미세 jitter가 키를 안 바꿔 동일 뷰포트 dedup.
     queryKey: ['mapComplexesBbox', bounds, propertyType, tradeType, from, to, band],
-    queryFn: () => api.map.complexesInBounds(bounds!, propertyType, tradeType, from, to, band),
+    // signal: bbox(키)가 바뀌면 TanStack이 이전 요청을 abort → out-of-order stale 덮어쓰기 제거.
+    queryFn: ({ signal }) =>
+      api.map.complexesInBounds(bounds!, propertyType, tradeType, from, to, band, signal),
     enabled: enabled && bounds !== null,
-    // bbox(=queryKey)가 팬마다 바뀌어도 새 데이터 도착 전까지 이전 마커 data 유지 →
-    // markerData가 빈 배열로 깜빡이지 않고 순수 incremental diff로 갱신.
+    // 팬마다 bbox(키)가 바뀌어도 새 데이터 도착 전까진 이전 마커 유지 → 빈 배열 깜빡임 없이 diff 갱신.
     placeholderData: keepPreviousData,
-    // bounded polling while background geocoding fills markers, then stop (Kakao quota 보호)
-    refetchInterval: (query) => (query.state.dataUpdateCount < 6 ? 8000 : false),
+    // "한 뷰포트 = 한 요청" — 정착된 bbox를 반복 발사하던 폴링 제거(지오코딩 워밍 완료로 fill-in 불필요).
+    refetchInterval: false,
   });
 }
 
