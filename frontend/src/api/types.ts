@@ -88,6 +88,8 @@ export interface MapComplex {
   count: number;
   /** 1년 평당가 변동률 (%) — 상승률 색 모드용. null이면 데이터 부족. */
   changePct: number | null;
+  /** 이 단지 최초 거래월(YYYYMM) — bbox 전체 MIN으로 '부분수집 지역' 배너 판정. */
+  earliestYmd: string | null;
 }
 
 /** 단일 단지 평당가(전용) 변동률 — 현재 12개월 vs 직전 12개월. hasData=false면 "변동 데이터 부족". */

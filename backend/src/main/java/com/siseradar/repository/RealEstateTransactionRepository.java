@@ -268,7 +268,8 @@ public interface RealEstateTransactionRepository extends JpaRepository<RealEstat
                  AVG(CASE WHEN t.deal_ymd BETWEEN :curFrom AND :curTo THEN COALESCE(t.deal_amount, t.deposit) / NULLIF(t.area, 0) END) AS curAvg,
                  AVG(CASE WHEN t.deal_ymd BETWEEN :prevFrom AND :prevTo THEN COALESCE(t.deal_amount, t.deposit) / NULLIF(t.area, 0) END) AS prevAvg,
                  SUM(CASE WHEN t.deal_ymd BETWEEN :curFrom AND :curTo THEN 1 ELSE 0 END) AS curCnt,
-                 SUM(CASE WHEN t.deal_ymd BETWEEN :prevFrom AND :prevTo THEN 1 ELSE 0 END) AS prevCnt
+                 SUM(CASE WHEN t.deal_ymd BETWEEN :prevFrom AND :prevTo THEN 1 ELSE 0 END) AS prevCnt,
+                 MIN(t.deal_ymd) AS earliestYmd
           FROM real_estate_transaction t
           JOIN complex_geocode g
             ON g.lawd_cd = t.lawd_cd AND g.building_name = t.building_name

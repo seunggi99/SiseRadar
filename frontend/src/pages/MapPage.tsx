@@ -34,6 +34,10 @@ const SWATCH_W = 38;
 const IDLE_DEBOUNCE_MS = 300;
 // bbox 양자화(소수 자릿수) — 미세 jitter로 queryKey가 매번 달라져 중복 발사되는 것 방지.
 const BBOX_QUANT = 1000; // 3 decimals
+// 완전수집 목표 개월(10년). earliest가 이보다 최근이면 '아직 수집 중'(부분) 지역으로 보고 배너 표시.
+const FULL_TARGET_MONTHS = 120;
+/** "YYYYMM" → 절대 월 인덱스(정렬·차이 계산용). */
+const ymIndex = (ym: string) => Number(ym.slice(0, 4)) * 12 + (Number(ym.slice(4, 6)) - 1);
 
 /** 색 인코딩 모드: 시세(평당가 수준 teal) ↔ 상승률(1년 변동률 diverging). */
 type ColorMode = 'price' | 'change';
@@ -208,6 +212,7 @@ export function MapPage() {
   const [level, setLevel] = useState(6);
   const [bounds, setBounds] = useState<Bounds | null>(null);
   const [colorMode, setColorMode] = useState<ColorMode>('price');
+  const [coverageDismissed, setCoverageDismissed] = useState(false); // 커버리지 배너 세션 1회 닫기
 
   const showBubbles = level >= REGION_ZOOM;
   const labelMode = !showBubbles && level <= LABEL_ZOOM; // 많이 확대 → 값 라벨 핀
@@ -235,6 +240,18 @@ export function MapPage() {
     [complexes.data, hasMarkers, showBubbles],
   );
   const regionData = regions.data ?? [];
+
+  // 부분수집 지역 커버리지: 화면 마커들의 최초 거래월 MIN → 최근 N개월. N<120(10년)이면 '수집 중'.
+  // 서울·분당은 earliest≈201606이라 자동으로 배너 안 뜸(완전 지역). 혼합 bbox는 오래된 쪽이 이김.
+  const earliestYmd = markerData.reduce<string | null>(
+    (min, c) => (c.earliestYmd && (min === null || c.earliestYmd < min) ? c.earliestYmd : min),
+    null,
+  );
+  const now = new Date();
+  const monthsAvailable = earliestYmd
+    ? now.getFullYear() * 12 + now.getMonth() - ymIndex(earliestYmd) + 1
+    : null;
+  const partialRegion = monthsAvailable !== null && monthsAvailable < FULL_TARGET_MONTHS;
 
   // init map once
   useEffect(() => {
@@ -498,6 +515,35 @@ export function MapPage() {
             />
           </div>
         </div>
+
+        {/* 부분수집 지역 안내 — 중립 톤 얇은 배너. 완전 지역(서울·분당)은 자동으로 안 뜸. */}
+        {partialRegion && !coverageDismissed && (
+          <div
+            className="mb-3 flex items-center justify-between gap-3 px-3.5 py-2 text-xs"
+            style={{
+              borderRadius: 'var(--sr-radius)',
+              border: '0.5px solid var(--sr-border)',
+              background: 'var(--sr-surface)',
+              color: 'var(--sr-text-muted)',
+            }}
+          >
+            <span>
+              이 지역은 데이터를 모으는 중이에요 — 현재 최근{' '}
+              <span className="sr-num" style={{ color: 'var(--sr-text)' }}>
+                {monthsAvailable}개월
+              </span>{' '}
+              반영, 계속 확대 중.
+            </span>
+            <button
+              type="button"
+              onClick={() => setCoverageDismissed(true)}
+              aria-label="안내 닫기"
+              style={{ color: 'var(--sr-text-muted)', lineHeight: 1, padding: '0 2px' }}
+            >
+              ✕
+            </button>
+          </div>
+        )}
 
         <div className="sr-surface relative overflow-hidden" style={{ borderRadius: 'var(--sr-radius)' }}>
           <div ref={mapRef} style={{ width: '100%', height: '70vh' }} />

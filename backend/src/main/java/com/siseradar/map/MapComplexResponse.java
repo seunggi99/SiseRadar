@@ -12,4 +12,6 @@ public record MapComplexResponse(
     long avgPricePerArea,
     long medianPricePerArea,
     long count,
-    Double changePct) {}
+    Double changePct,
+    // 최초 거래월(YYYYMM) — 프론트가 bbox 전체 MIN으로 '부분수집 지역' 배너를 판정. null=레거시 경로.
+    String earliestYmd) {}

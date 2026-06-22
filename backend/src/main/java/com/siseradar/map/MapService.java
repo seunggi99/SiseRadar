@@ -240,7 +240,8 @@ public class MapService {
               Math.round(r.getAvgPricePerArea()),
               Math.round(r.getMedianPricePerArea()),
               r.getCnt(),
-              markerChangePct(r)));
+              markerChangePct(r),
+              r.getEarliestYmd()));
     }
 
     // 미캐시 단지 lazy 지오코딩 'discovery'는 비동기로 분리 — markers 응답 경로를 막지 않는다.
@@ -287,7 +288,8 @@ public class MapService {
                   Math.round(row.getAvgPricePerArea()),
                   Math.round(row.getMedianPricePerArea()),
                   row.getCnt(),
-                  null)); // legacy per-region path doesn't compute 변동률
+                  null, // 변동률 (레거시 경로 미계산)
+                  null)); // earliestYmd (레거시 경로 미사용)
         }
         // PENDING/FAILED → skip
         continue;

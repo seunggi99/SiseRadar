@@ -24,4 +24,7 @@ public interface MapMarkerRow {
   long getCurCnt();
 
   long getPrevCnt();
+
+  /** 이 단지 거래의 최초 거래월(YYYYMM) — 부분수집 지역 커버리지 배너 판정용. */
+  String getEarliestYmd();
 }
