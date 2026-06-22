@@ -37,6 +37,11 @@ import {
 } from '../lib/format';
 import { regionName } from '../lib/regions';
 
+// 완전수집 목표 개월(10년). 수집 기간이 이보다 짧으면 '아직 수집 중'(부분) 지역으로 보고 배너 표시.
+const FULL_TARGET_MONTHS = 120;
+/** "YYYYMM" → 절대 월 인덱스(차이 계산용). */
+const ymIndex = (ym: string) => Number(ym.slice(0, 4)) * 12 + (Number(ym.slice(4, 6)) - 1);
+
 /** 버킷 크기(개월)에 맞는 기간 명사 — 전월/전분기/전반기/전년 라벨에 사용. */
 function periodNoun(bucketMonths: number): string {
   return bucketMonths === 1 ? '월' : bucketMonths === 3 ? '분기' : bucketMonths === 6 ? '반기' : '년';
@@ -58,6 +63,7 @@ export function DashboardPage() {
     useFilters();
   const [selectedComplex, setSelectedComplex] = useState<string | null>(null);
   const [mapOpen, setMapOpen] = useState(false);
+  const [coverageDismissed, setCoverageDismissed] = useState(false); // 부분수집 배너 세션 1회 닫기
   // 차트 봉 하나당 묶는 개월 수(버킷). 표시 범위는 기간 필터(from/to)가 담당.
   const [bucketMonths, setBucketMonths] = useState(1);
   const monthly = useMonthlyStats(lawdCd, propertyType, tradeType, from, to, bucketMonths);
@@ -100,6 +106,15 @@ export function DashboardPage() {
   const addWatchlist = useAddWatchlist();
 
   const latest = stats.length ? stats[stats.length - 1] : null;
+
+  // 부분수집 지역 안내: 수집된 최초 월(stats[0].ym) 기준 '최근 N개월'. N<120(10년)이면 아직 수집 중.
+  // 서울·분당은 N≈121이라 자동으로 안 뜸. 다른 지역이 백필되면 N이 늘다 120에서 사라짐.
+  const earliestYm = stats.length ? stats[0].ym : null;
+  const now = new Date();
+  const monthsAvailable = earliestYm
+    ? now.getFullYear() * 12 + now.getMonth() - ymIndex(earliestYm) + 1
+    : null;
+  const partialRegion = monthsAvailable !== null && monthsAvailable < FULL_TARGET_MONTHS;
 
   function requireLogin(): boolean {
     if (isAuthenticated) return true;
@@ -165,6 +180,35 @@ export function DashboardPage() {
             onTradeChange={setTradeType}
           />
         </div>
+
+        {/* 부분수집 지역 안내 — 중립 톤 얇은 배너. 완전 지역(서울·분당)은 자동으로 안 뜸. */}
+        {partialRegion && !coverageDismissed && (
+          <div
+            className="mb-6 flex items-center justify-between gap-3 px-3.5 py-2 text-xs"
+            style={{
+              borderRadius: 'var(--sr-radius)',
+              border: '0.5px solid var(--sr-border)',
+              background: 'var(--sr-surface)',
+              color: 'var(--sr-text-muted)',
+            }}
+          >
+            <span>
+              이 지역은 데이터를 모으는 중이에요 — 현재 최근{' '}
+              <span className="sr-num" style={{ color: 'var(--sr-text)' }}>
+                {monthsAvailable}개월
+              </span>{' '}
+              반영, 계속 확대 중.
+            </span>
+            <button
+              type="button"
+              onClick={() => setCoverageDismissed(true)}
+              aria-label="안내 닫기"
+              style={{ color: 'var(--sr-text-muted)', lineHeight: 1, padding: '0 2px' }}
+            >
+              ✕
+            </button>
+          </div>
+        )}
 
         {monthly.isLoading ? (
           <LoadingState />
