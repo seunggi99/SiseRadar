@@ -615,16 +615,36 @@ export function MapPage() {
               이 유형은 개별 단지 위치를 제공하지 않아요 — 축소하면 지역 집계가 보여요
             </div>
           )}
-          {hasMarkers && ready && !showBubbles && markerData.length === 0 && (
-            <div className="absolute bottom-3 left-1/2 -translate-x-1/2 sr-surface px-3 py-1.5 text-xs sr-muted">
-              <RadarSpinner size={14} /> 이 화면의 단지 위치를 불러오는 중…
+          {/* 마커 로딩: 처음/빈 화면은 중앙에 또렷이, 정착 후 빈 영역은 '단지 없음' 안내 */}
+          {hasMarkers && ready && !showBubbles && markerData.length === 0 &&
+            (complexes.isPending ? (
+              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2">
+                <RadarSpinner size={36} />
+                <span className="sr-surface px-3 py-1 text-xs sr-muted">단지 위치를 불러오는 중…</span>
+              </div>
+            ) : (
+              <div className="absolute bottom-3 left-1/2 -translate-x-1/2 sr-surface px-3 py-1.5 text-xs sr-muted">
+                이 영역엔 표시할 단지가 없어요 — 옮기거나 축소해 보세요
+              </div>
+            ))}
+          {/* 버블 로딩: 처음/빈 화면 중앙 스피너 */}
+          {showBubbles && ready && regionData.length === 0 && regions.isPending && (
+            <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2">
+              <RadarSpinner size={36} />
+              <span className="sr-surface px-3 py-1 text-xs sr-muted">지역 집계를 불러오는 중…</span>
             </div>
           )}
-          {showBubbles && ready && regionData.length === 0 && (
-            <div className="absolute bottom-3 left-1/2 -translate-x-1/2 sr-surface px-3 py-1.5 text-xs sr-muted">
-              <RadarSpinner size={14} /> 지역 집계를 불러오는 중…
-            </div>
-          )}
+          {/* 팬/필터 갱신 중(이미 떠 있는 상태) — 상단에 살짝 */}
+          {ready &&
+            ((!showBubbles && complexes.isFetching && markerData.length > 0) ||
+              (showBubbles && regions.isFetching && regionData.length > 0)) && (
+              <div
+                className="sr-surface absolute left-1/2 top-3 flex -translate-x-1/2 items-center gap-1.5 px-2.5 py-1 text-xs sr-muted"
+                style={{ zIndex: 6 }}
+              >
+                <RadarSpinner size={12} /> 갱신 중…
+              </div>
+            )}
         </div>
       </main>
     </div>
